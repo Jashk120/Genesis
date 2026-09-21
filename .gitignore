@@ -1,0 +1,9 @@
+/target/
+**/target/
+node_modules/
+dist/
+.env
+.omo/
+.codegraph
+.playwright-mcp/
+/*.png
