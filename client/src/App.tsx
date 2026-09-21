@@ -10,8 +10,10 @@ import {
   type Workspace,
 } from "./api";
 import type { DeltaTree } from "./mapper";
-import { PageTree } from "./components/PageTree";
+import { AppSidebar } from "./components/AppSidebar";
+import { DocumentHeader } from "./components/DocumentHeader";
 import { PageEditor } from "./components/PageEditor";
+import { SearchPalette } from "./components/SearchPalette";
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -24,7 +26,7 @@ export function App() {
   const [pageId, setPageId] = useState<string | null>(null);
   const [tree, setTree] = useState<DeltaTree | null>(null);
   const [status, setStatus] = useState<string>("");
-  const [newTitle, setNewTitle] = useState<string>("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const pendingFlushRef = useRef<(() => Promise<void>) | null>(null);
 
   const refreshPages = useCallback(async (wsId: string) => {
@@ -46,6 +48,24 @@ export function App() {
       setStatus(`Failed to load pages: ${errMsg(err)}`),
     );
   }, [workspaceId, refreshPages]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleSelectWorkspace = useCallback((id: string) => {
+    setWorkspaceId(id);
+    setPageId(null);
+    setTree(null);
+    setStatus("");
+  }, []);
 
   const openPage = useCallback(async (id: string) => {
     await pendingFlushRef.current?.().catch(() => undefined);
@@ -74,10 +94,9 @@ export function App() {
   );
 
   async function handleCreate() {
-    if (workspaceId === null || newTitle.trim() === "") return;
+    if (workspaceId === null) return;
     try {
-      const page = await createPage({ workspace_id: workspaceId, title: newTitle.trim() });
-      setNewTitle("");
+      const page = await createPage({ workspace_id: workspaceId, title: "Untitled" });
       await refreshPages(workspaceId);
       await openPage(page.id);
     } catch (err: unknown) {
@@ -110,68 +129,38 @@ export function App() {
   const selected = pages.find((p) => p.id === pageId) ?? null;
 
   return (
-    <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
-      <aside
-        style={{ width: 280, borderRight: "1px solid #ddd", padding: 12, overflowY: "auto" }}
-      >
-        <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>Genesis</h2>
-        <label style={{ display: "block", fontSize: 12, color: "#666" }}>
-          Workspace
-          <select
-            value={workspaceId ?? ""}
-            onChange={(e) => {
-              setWorkspaceId(e.target.value === "" ? null : e.target.value);
-              setPageId(null);
-              setTree(null);
-            }}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
-          >
-            {workspaces.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <h3 style={{ fontSize: 14, margin: "12px 0 4px" }}>Pages</h3>
-        <PageTree pages={pages} selectedId={pageId} onSelect={(id) => void openPage(id)} />
-        <div style={{ marginTop: 12, display: "flex", gap: 4 }}>
-          <input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="New page title"
-            style={{ flex: 1, minWidth: 0 }}
-          />
-          <button type="button" onClick={() => void handleCreate()}>
-            +
-          </button>
-        </div>
-      </aside>
-      <main style={{ flex: 1, padding: 16, overflowY: "auto" }}>
-        {status !== "" && (
-          <p style={{ color: "#a00", fontSize: 13 }} role="alert">
-            {status}
-          </p>
-        )}
-        {selected === null ? (
-          <p style={{ color: "#666" }}>Select a page to edit.</p>
-        ) : (
-          <div>
-            <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-              <PageTitleInput
-                key={selected.id}
-                pageId={selected.id}
-                title={selected.title}
-                onRename={(title) => void handleRename(selected.id, title)}
-              />
-              <span style={{ color: "#999", fontSize: 12 }}>{selected.kind}</span>
-              <span style={{ flex: 1 }} />
-              <button type="button" onClick={() => void handleDelete()}>
-                Delete page
-              </button>
-            </div>
-            {tree === null || workspaceId === null ? (
-              <p style={{ color: "#666" }}>Loading blocks…</p>
+    <div className="app-root">
+      <AppSidebar
+        workspaces={workspaces}
+        workspaceId={workspaceId}
+        onSelectWorkspace={handleSelectWorkspace}
+        pages={pages}
+        selectedId={pageId}
+        onSelectPage={handleNavigate}
+        onCreatePage={() => void handleCreate()}
+        onOpenSearch={() => setSearchOpen(true)}
+      />
+
+      <main className="app-main">
+        <DocumentHeader
+          page={selected}
+          onRename={(title) => {
+            if (selected !== null) void handleRename(selected.id, title);
+          }}
+          onDelete={() => void handleDelete()}
+        />
+
+        <div className="doc-scroll">
+          <div className="doc-column">
+            {status !== "" && (
+              <p className="app-status" role="alert">
+                {status}
+              </p>
+            )}
+            {selected === null ? (
+              <p className="app-hint">Select a page to edit, or create one with +.</p>
+            ) : tree === null || workspaceId === null ? (
+              <p className="app-hint">Loading blocks…</p>
             ) : (
               <PageEditor
                 key={selected.id}
@@ -185,51 +174,15 @@ export function App() {
               />
             )}
           </div>
-        )}
+        </div>
       </main>
+
+      <SearchPalette
+        open={searchOpen}
+        pages={pages}
+        onClose={() => setSearchOpen(false)}
+        onSelect={(id) => void openPage(id)}
+      />
     </div>
-  );
-}
-
-function PageTitleInput({
-  pageId,
-  title,
-  onRename,
-}: {
-  pageId: string;
-  title: string;
-  onRename: (title: string) => void;
-}) {
-  const [value, setValue] = useState(title);
-
-  function commit() {
-    const trimmed = value.trim();
-    if (trimmed !== "" && trimmed !== title) onRename(trimmed);
-    else setValue(title);
-  }
-
-  return (
-    <input
-      aria-label="Page title"
-      data-testid="page-title-input"
-      data-page-id={pageId}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") setValue(title);
-      }}
-      style={{
-        fontSize: 22,
-        fontWeight: 700,
-        margin: 0,
-        padding: "2px 4px",
-        border: "1px solid transparent",
-        borderRadius: 4,
-        minWidth: 0,
-        flex: 1,
-      }}
-    />
   );
 }

@@ -4,6 +4,8 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { genesisExtensions } from "./extensions";
 import { SubPageContext } from "./SubPage";
+import { BlockGutter } from "./BlockGutter";
+import { FormatToolbar } from "./FormatToolbar";
 import { DebouncedSaver } from "./autosave";
 import {
   deltaTreeToProseMirror,
@@ -37,7 +39,7 @@ export function PageEditor({
   flushRef,
 }: PageEditorProps) {
   const [status, setStatus] = useState<string>("");
-  const [saving, setSaving] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   const editorRef = useRef<Editor | null>(null);
   const readyRef = useRef(false);
@@ -99,7 +101,6 @@ export function PageEditor({
       return;
     }
     savingRef.current = true;
-    setSaving(true);
     setStatus("Saving…");
     try {
       const json = current.getJSON() as PMDoc;
@@ -114,7 +115,6 @@ export function PageEditor({
       setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       savingRef.current = false;
-      setSaving(false);
     }
   }
 
@@ -135,12 +135,6 @@ export function PageEditor({
     };
   }, [editor]);
 
-  async function handleSave() {
-    if (editor === null || savingRef.current) return;
-    saverRef.current?.cancel();
-    await persistRef.current();
-  }
-
   const navigateSoon = useCallback(
     (id: string) => {
       void (async () => {
@@ -153,64 +147,16 @@ export function PageEditor({
 
   return (
     <SubPageContext.Provider value={{ pages, onNavigate: navigateSoon }}>
-      <div>
-        <Toolbar
-          onAction={(fn) => {
-            if (editor) fn(editor);
-          }}
-          editorExists={editor !== null}
-        />
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 4,
-            padding: "8px 12px",
-            minHeight: 240,
-            marginTop: 8,
-          }}
-        >
+      <div className="editor-wrap" ref={wrapRef}>
+        <div className="editor-box">
           <EditorContent editor={editor} />
+          <BlockGutter editor={editor} wrapRef={wrapRef} />
+          <FormatToolbar editor={editor} />
         </div>
-        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
-          <button type="button" onClick={handleSave} disabled={!editor || saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          {status !== "" && <span style={{ fontSize: 13 }}>{status}</span>}
-        </div>
+        {status !== "" && (
+          <div style={{ marginTop: 6, fontSize: 12, color: "#6f6f6f" }}>{status}</div>
+        )}
       </div>
     </SubPageContext.Provider>
-  );
-}
-
-function Toolbar({
-  onAction,
-  editorExists,
-}: {
-  onAction: (fn: (editor: Editor) => void) => void;
-  editorExists: boolean;
-}) {
-  const btn = (label: string, fn: (editor: Editor) => void) => (
-    <button
-      key={label}
-      type="button"
-      disabled={!editorExists}
-      onClick={() => onAction(fn)}
-      style={{ marginRight: 4 }}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div>
-      {btn("B", (e) => void e.chain().focus().toggleBold().run())}
-      {btn("I", (e) => void e.chain().focus().toggleItalic().run())}
-      {btn("<>", (e) => void e.chain().focus().toggleCode().run())}
-      {btn("H1", (e) => void e.chain().focus().toggleHeading({ level: 1 }).run())}
-      {btn("H2", (e) => void e.chain().focus().toggleHeading({ level: 2 }).run())}
-      {btn("• list", (e) => void e.chain().focus().toggleBulletList().run())}
-      {btn("1. list", (e) => void e.chain().focus().toggleOrderedList().run())}
-      {btn("Quote", (e) => void e.chain().focus().toggleBlockquote().run())}
-      {btn("Code", (e) => void e.chain().focus().toggleCodeBlock().run())}
-    </div>
   );
 }
