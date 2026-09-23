@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MapperError,
+  assignMissingBlockIds,
   deltaTreeToProseMirror,
   ensureBlockIds,
   proseMirrorToDeltaTree,
@@ -391,5 +392,101 @@ describe("mapper fails loudly on unsupported constructs", () => {
         content: [{ type: "paragraph", attrs: { textAlign: "center" } }],
       }),
     ).toThrow(/unsupported attribute "textAlign"/);
+  });
+});
+
+describe("assignMissingBlockIds", () => {
+  it("assigns ids exactly once and stays stable across repeated passes", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "hi" }] }],
+    };
+    const first = assignMissingBlockIds(doc);
+    expect(first.changed).toBe(true);
+    expect(typeof first.doc.attrs?.["blockId"]).toBe("string");
+    expect(typeof first.doc.content[0]?.attrs?.["blockId"]).toBe("string");
+    const second = assignMissingBlockIds(first.doc);
+    expect(second.changed).toBe(false);
+    expect(second.doc).toEqual(first.doc);
+  });
+
+  it("never overwrites existing ids, including the root", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      attrs: { blockId: "root-keep" },
+      content: [
+        { type: "paragraph", attrs: { blockId: "p-keep" }, content: [{ type: "text", text: "a" }] },
+        { type: "paragraph", content: [{ type: "text", text: "b" }] },
+      ],
+    };
+    const { doc: out, changed } = assignMissingBlockIds(doc);
+    expect(changed).toBe(true);
+    expect(out.attrs?.["blockId"]).toBe("root-keep");
+    expect(out.content[0]?.attrs?.["blockId"]).toBe("p-keep");
+    expect(typeof out.content[1]?.attrs?.["blockId"]).toBe("string");
+  });
+
+  it("assigns ids to nested nodes without touching existing ones", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              attrs: { blockId: "li-keep" },
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "item" }] },
+                {
+                  type: "orderedList",
+                  content: [
+                    {
+                      type: "listItem",
+                      content: [{ type: "paragraph", content: [{ type: "text", text: "sub" }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const { doc: out } = assignMissingBlockIds(doc);
+    const list = out.content[0];
+    expect(typeof list?.attrs?.["blockId"]).toBe("string");
+    expect(list?.content?.[0]?.attrs?.["blockId"]).toBe("li-keep");
+    const nested = list?.content?.[0]?.content?.[1];
+    expect(typeof nested?.attrs?.["blockId"]).toBe("string");
+    expect(typeof nested?.content?.[0]?.attrs?.["blockId"]).toBe("string");
+    const again = assignMissingBlockIds(out);
+    expect(again.changed).toBe(false);
+    expect(again.doc).toEqual(out);
+  });
+
+  it("fills an empty document's root id and leaves the input untouched", () => {
+    const doc: PMDoc = { type: "doc", content: [] };
+    const { doc: out, changed } = assignMissingBlockIds(doc);
+    expect(changed).toBe(true);
+    expect(typeof out.attrs?.["blockId"]).toBe("string");
+    expect(doc.attrs).toBeUndefined();
+    expect(out.content).toEqual([]);
+  });
+
+  it("treats null and empty ids as missing but keeps valid ones", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      content: [
+        { type: "paragraph", attrs: { blockId: null } },
+        { type: "paragraph", attrs: { blockId: "" } },
+        { type: "paragraph", attrs: { blockId: "fine" } },
+      ],
+    };
+    const { doc: out } = assignMissingBlockIds(doc);
+    expect(typeof out.content[0]?.attrs?.["blockId"]).toBe("string");
+    expect(out.content[0]?.attrs?.["blockId"]).not.toBe("");
+    expect(typeof out.content[1]?.attrs?.["blockId"]).toBe("string");
+    expect(out.content[2]?.attrs?.["blockId"]).toBe("fine");
   });
 });

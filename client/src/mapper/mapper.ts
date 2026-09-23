@@ -43,6 +43,61 @@ export function newBlockId(): string {
   });
 }
 
+/**
+ * ProseMirror node types that carry a `blockId` attr. Single source of truth
+ * shared with the `BlockId` Tiptap extension's global attribute declaration.
+ */
+export const BLOCK_ID_NODE_TYPES: ReadonlySet<string> = new Set([
+  "heading",
+  "paragraph",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "blockquote",
+  "codeBlock",
+  "subPage",
+]);
+
+function hasJsonBlockId(attrs: Record<string, unknown> | undefined): boolean {
+  const v: unknown = attrs?.["blockId"];
+  return typeof v === "string" && v !== "";
+}
+
+/**
+ * Pure JSON-level counterpart of the editor's `BlockId` plugin: walk a
+ * ProseMirror doc and mint a `blockId` for the doc itself (`attrs.blockId`)
+ * and every supported block node missing one. Returns a new doc; the input
+ * is not mutated. Existing ids are never overwritten, so repeated passes are
+ * stable (the second pass reports `changed: false` and a deep-equal doc).
+ */
+export function assignMissingBlockIds(doc: PMDoc): { doc: PMDoc; changed: boolean } {
+  let changed = false;
+  const walkNode = (node: PMNode): PMNode => {
+    const content: PMNode[] | undefined =
+      node.content === undefined ? undefined : node.content.map(walkNode);
+    if (BLOCK_ID_NODE_TYPES.has(node.type) && !hasJsonBlockId(node.attrs)) {
+      changed = true;
+      const next: PMNode = { ...node, attrs: { ...node.attrs, blockId: newBlockId() } };
+      if (content !== undefined) next.content = content;
+      return next;
+    }
+    if (content !== undefined && content.some((child, i) => child !== node.content?.[i])) {
+      return { ...node, content };
+    }
+    return node;
+  };
+  let out: PMDoc = doc;
+  if (!hasJsonBlockId(doc.attrs)) {
+    changed = true;
+    out = { ...doc, attrs: { ...doc.attrs, blockId: newBlockId() } };
+  }
+  const content = doc.content.map(walkNode);
+  if (content.some((child, i) => child !== doc.content[i])) {
+    out = { ...out, content };
+  }
+  return { doc: out, changed };
+}
+
 const MARK_ORDER: ReadonlyArray<"bold" | "italic" | "code" | "link"> = [
   "bold",
   "italic",
