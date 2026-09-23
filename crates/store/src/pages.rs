@@ -212,4 +212,22 @@ impl<'a> PageRepository<'a> {
         }
         Ok(())
     }
+
+    pub async fn delete_with_history(&self, page_id: Uuid) -> Result<(), StoreError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(r#"DELETE FROM snapshot WHERE source_page_id = $1"#)
+            .bind(page_id)
+            .execute(&mut *tx)
+            .await?;
+        let res = sqlx::query(r#"DELETE FROM page WHERE id = $1"#)
+            .bind(page_id)
+            .execute(&mut *tx)
+            .await?;
+        if res.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Err(StoreError::NotFound(format!("page {page_id}")));
+        }
+        tx.commit().await?;
+        Ok(())
+    }
 }

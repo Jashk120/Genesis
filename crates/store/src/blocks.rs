@@ -58,13 +58,26 @@ impl<'a> BlockRepository<'a> {
         flat: &[FlatBlock],
     ) -> Result<(), StoreError> {
         let mut tx = self.pool.begin().await?;
+        self.replace_for_page_tx(&mut tx, page_id, flat).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Tx-scoped variant of [`Self::replace_for_page`] so multi-page restores
+    /// can share one transaction with the caller.
+    pub async fn replace_for_page_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        page_id: Uuid,
+        flat: &[FlatBlock],
+    ) -> Result<(), StoreError> {
         if !flat.is_empty() {
             let ids: Vec<Uuid> = flat.iter().map(|b| b.id).collect();
             let conflicts: Vec<Uuid> =
                 sqlx::query_scalar(r#"SELECT id FROM block WHERE id = ANY($1) AND page_id <> $2"#)
                     .bind(&ids)
                     .bind(page_id)
-                    .fetch_all(&mut *tx)
+                    .fetch_all(&mut **tx)
                     .await?;
             if !conflicts.is_empty() {
                 return Err(StoreError::Domain(domain::DomainError::InvalidInput(
@@ -91,16 +104,15 @@ impl<'a> BlockRepository<'a> {
             .bind(&b.block_type)
             .bind(&b.data)
             .bind(b.ordinal)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
         let ids: Vec<Uuid> = flat.iter().map(|b| b.id).collect();
         sqlx::query(r#"DELETE FROM block WHERE page_id = $1 AND id <> ALL($2)"#)
             .bind(page_id)
             .bind(&ids)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-        tx.commit().await?;
         Ok(())
     }
 }

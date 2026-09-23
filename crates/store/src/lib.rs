@@ -2,12 +2,14 @@ pub mod blocks;
 pub mod claims;
 pub mod db;
 pub mod pages;
+pub mod snapshots;
 pub mod workspaces;
 
 pub use blocks::BlockRepository;
 pub use claims::ClaimRepository;
 pub use db::{create_pool, create_pool_with_url, run_migrations};
 pub use pages::{PageQuery, PageRepository};
+pub use snapshots::SnapshotRepository;
 pub use workspaces::WorkspaceRepository;
 
 use thiserror::Error;
@@ -24,4 +26,8 @@ pub enum StoreError {
     Domain(#[from] domain::DomainError),
     #[error("not found: {0}")]
     NotFound(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
+    #[error("no_change: {0}")]
+    NoChange(String),
 }
