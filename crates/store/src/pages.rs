@@ -154,6 +154,36 @@ impl<'a> PageRepository<'a> {
         let current = self.get(id).await?;
         let title = title.unwrap_or(&current.title).to_string();
         let parent = parent_page_id.unwrap_or(current.parent_page_id);
+        if let Some(Some(new_parent)) = parent_page_id {
+            if new_parent == id {
+                return Err(StoreError::Domain(domain::DomainError::InvalidInput(
+                    "page cannot be its own parent".to_string(),
+                )));
+            }
+            let mut cursor: Option<Uuid> = Some(new_parent);
+            for _ in 0..1000 {
+                let cur = match cursor {
+                    Some(c) => c,
+                    None => break,
+                };
+                let row: Option<Option<Uuid>> =
+                    sqlx::query_scalar(r#"SELECT parent_page_id FROM page WHERE id = $1"#)
+                        .bind(cur)
+                        .fetch_optional(self.pool)
+                        .await?;
+                match row {
+                    None => break,
+                    Some(next) => {
+                        if next == Some(id) {
+                            return Err(StoreError::Domain(domain::DomainError::InvalidInput(
+                                "page parent would create a cycle".to_string(),
+                            )));
+                        }
+                        cursor = next;
+                    }
+                }
+            }
+        }
         let ordinal = ordinal.unwrap_or(current.ordinal);
         let narrative = narrative_order.unwrap_or(current.narrative_order);
         let row: PageRow = sqlx::query_as(
