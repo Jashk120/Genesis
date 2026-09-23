@@ -1,11 +1,7 @@
-mod app;
-mod config;
-mod routes;
-
 use sqlx::postgres::PgPoolOptions;
 use tracing::info;
 
-use crate::{app::build_router, config::Config, routes::AppState};
+use server::{app::build_router, config::Config, routes::AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
