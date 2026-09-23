@@ -7,7 +7,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -174,6 +174,18 @@ pub fn build_router(state: AppState, config: &Config) -> Router {
             get(get_page).patch(patch_page).delete(delete_page),
         )
         .route("/api/pages/{id}/blocks", get(get_blocks).put(put_blocks))
+        .route("/api/pages/{id}/export", get(export_page))
+        .route("/api/pages/{id}/history-bundle", get(history_bundle))
+        .route("/api/pages/{id}/cluster-export", get(cluster_export))
+        .route(
+            "/api/pages/{id}/snapshots",
+            get(list_snapshots).post(create_snapshot),
+        )
+        .route("/api/snapshots/diff", get(diff_snapshots))
+        .route("/api/snapshots/diff/export", get(export_diff))
+        .route("/api/snapshots/{id}", get(get_snapshot))
+        .route("/api/snapshots/{id}/export", get(export_snapshot))
+        .route("/api/snapshots/{id}/restore", post(restore_snapshot))
         .with_state(state);
 
     let dist = config.client_dist.clone();
