@@ -32,29 +32,17 @@ export function SubPageView({ node }: Pick<NodeViewProps, "node">) {
         data-testid="subpage-chip"
         data-page-id={pageId}
         data-block-id={blockId}
+        className="subpage-chip"
+        title={titleFor(pages, pageId)}
         onClick={() => onNavigate(pageId)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "3px 10px",
-          margin: "2px 0",
-          border: "1px solid #3a3a3a",
-          borderRadius: 6,
-          background: "#242424",
-          color: "#d4d4d4",
-          fontSize: 14,
-          lineHeight: "1.5",
-          cursor: "pointer",
-        }}
       >
         <svg
+          className="subpage-chip-icon"
           width="14"
           height="14"
           viewBox="0 0 16 16"
           fill="none"
           aria-hidden="true"
-          style={{ flexShrink: 0 }}
         >
           <path
             d="M3 1.5h6.5L13 5v9.5H3V1.5Z"
@@ -75,9 +63,7 @@ export function SubPageView({ node }: Pick<NodeViewProps, "node">) {
             strokeLinecap="round"
           />
         </svg>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {titleFor(pages, pageId)}
-        </span>
+        <span className="subpage-chip-title">{titleFor(pages, pageId)}</span>
       </button>
     </NodeViewWrapper>
   );
