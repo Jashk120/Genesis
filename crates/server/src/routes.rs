@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -36,6 +36,16 @@ fn store_err(e: store::StoreError) -> (StatusCode, Json<Value>) {
             Json(json!({"error": other.to_string()})),
         ),
     }
+}
+
+/// The synthetic `page` root has no stored block row, so it has no natural
+/// durable id. Give it the page id: stable across reloads, and distinct from
+/// every real content block id.
+fn with_root_block_id(mut tree: BlockNode, page_id: Uuid) -> BlockNode {
+    if let Some(map) = tree.data.as_object_mut() {
+        map.insert("blockId".to_string(), Value::String(page_id.to_string()));
+    }
+    tree
 }
 
 pub async fn health() -> impl IntoResponse {
@@ -131,12 +141,34 @@ pub async fn create_page(
         .map_err(store_err)
 }
 
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PatchPage {
     pub title: Option<String>,
+    #[serde(default, deserialize_with = "double_option")]
     pub parent_page_id: Option<Option<Uuid>>,
     pub ordinal: Option<i32>,
+    #[serde(default, deserialize_with = "double_option")]
     pub narrative_order: Option<Option<i32>>,
+}
+
+pub async fn get_page(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Page>, (StatusCode, Json<Value>)> {
+    let pool = db_required(&state)?;
+    PageRepository::new(pool)
+        .get(id)
+        .await
+        .map(Json)
+        .map_err(store_err)
 }
 
 pub async fn patch_page(
@@ -180,7 +212,7 @@ pub async fn get_blocks(
         .list_for_page(id)
         .await
         .map_err(store_err)?;
-    Ok(Json(block::assemble_tree(&rows)))
+    Ok(Json(with_root_block_id(block::assemble_tree(&rows), id)))
 }
 
 pub async fn put_blocks(
@@ -204,5 +236,5 @@ pub async fn put_blocks(
         .list_for_page(id)
         .await
         .map_err(store_err)?;
-    Ok(Json(block::assemble_tree(&rows)))
+    Ok(Json(with_root_block_id(block::assemble_tree(&rows), id)))
 }
