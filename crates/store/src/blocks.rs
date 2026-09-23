@@ -48,21 +48,42 @@ impl<'a> BlockRepository<'a> {
     }
 
     /// Replace all blocks of a page with `flat` in one transaction.
-    /// Block ids are preserved so claims/mentions stay anchored.
+    /// Rows whose ids persist are upserted in place so claims/mentions stay
+    /// anchored; only blocks absent from `flat` are deleted (cascading).
+    /// Upsert runs before prune so reparented blocks are not cascaded away
+    /// by the removal of an old parent.
     pub async fn replace_for_page(
         &self,
         page_id: Uuid,
         flat: &[FlatBlock],
     ) -> Result<(), StoreError> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query(r#"DELETE FROM block WHERE page_id = $1"#)
-            .bind(page_id)
-            .execute(&mut *tx)
-            .await?;
+        if !flat.is_empty() {
+            let ids: Vec<Uuid> = flat.iter().map(|b| b.id).collect();
+            let conflicts: Vec<Uuid> =
+                sqlx::query_scalar(r#"SELECT id FROM block WHERE id = ANY($1) AND page_id <> $2"#)
+                    .bind(&ids)
+                    .bind(page_id)
+                    .fetch_all(&mut *tx)
+                    .await?;
+            if !conflicts.is_empty() {
+                return Err(StoreError::Domain(domain::DomainError::InvalidInput(
+                    format!("block id {} already belongs to another page", conflicts[0]),
+                )));
+            }
+        }
+        // `flat` arrives parent-first from `flatten_tree`, satisfying the
+        // `parent_block_id` self-FK in a single pass.
         for b in flat {
             sqlx::query(
                 r#"INSERT INTO block (id, page_id, parent_block_id, type, data, ordinal)
-                   VALUES ($1,$2,$3,$4,$5,$6)"#,
+                   VALUES ($1,$2,$3,$4,$5,$6)
+                   ON CONFLICT (id) DO UPDATE SET
+                       parent_block_id = EXCLUDED.parent_block_id,
+                       type = EXCLUDED.type,
+                       data = EXCLUDED.data,
+                       ordinal = EXCLUDED.ordinal
+                   WHERE block.page_id = EXCLUDED.page_id"#,
             )
             .bind(b.id)
             .bind(page_id)
@@ -73,6 +94,12 @@ impl<'a> BlockRepository<'a> {
             .execute(&mut *tx)
             .await?;
         }
+        let ids: Vec<Uuid> = flat.iter().map(|b| b.id).collect();
+        sqlx::query(r#"DELETE FROM block WHERE page_id = $1 AND id <> ALL($2)"#)
+            .bind(page_id)
+            .bind(&ids)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok(())
     }
