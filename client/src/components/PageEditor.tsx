@@ -7,7 +7,9 @@ import { SubPageContext } from "./SubPage";
 import { BlockGutter } from "./BlockGutter";
 import { FormatToolbar } from "./FormatToolbar";
 import { DebouncedSaver } from "./autosave";
+import { EditorSaveStatus, type EditorSaveState } from "./EditorSaveStatus";
 import {
+  assignMissingBlockIds,
   deltaTreeToProseMirror,
   ensureBlockIds,
   proseMirrorToDeltaTree,
@@ -38,7 +40,8 @@ export function PageEditor({
   onPagesChanged,
   flushRef,
 }: PageEditorProps) {
-  const [status, setStatus] = useState<string>("");
+  const [saveState, setSaveState] = useState<EditorSaveState>("idle");
+  const [saveError, setSaveError] = useState<string>("");
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const editorRef = useRef<Editor | null>(null);
@@ -52,15 +55,16 @@ export function PageEditor({
     saverRef.current = new DebouncedSaver(AUTOSAVE_DELAY_MS, () => persistRef.current());
   }
 
-  // Keep the root blockId outside the editor (doc nodes have no attrs).
-  // Recomputed only when the open page changes.
+  // Root blockId fallback, recomputed only when the open page changes. The
+  // live doc now carries attrs.blockId itself (BlockId extension); runPersist
+  // prefers the ref and refreshes it from each successful save.
   const pageBlockId = useMemo(
     () => initialTree.data?.blockId,
     // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by page
     [pageId],
   );
   const initialDoc = useMemo(
-    () => deltaTreeToProseMirror(initialTree),
+    () => assignMissingBlockIds(deltaTreeToProseMirror(initialTree)).doc,
     // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by page
     [pageId],
   );
@@ -71,7 +75,10 @@ export function PageEditor({
         workspaceId,
         parentPageId: pageId,
         onPagesChanged,
-        onError: (message) => setStatus(`Sub-page failed: ${message}`),
+        onError: (message) => {
+          setSaveError(`Sub-page failed: ${message}`);
+          setSaveState("error");
+        },
       }),
     // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by page
     [pageId, workspaceId],
@@ -101,7 +108,7 @@ export function PageEditor({
       return;
     }
     savingRef.current = true;
-    setStatus("Saving…");
+    setSaveState("saving");
     try {
       const json = current.getJSON() as PMDoc;
       const tree = ensureBlockIds(proseMirrorToDeltaTree(json));
@@ -110,9 +117,14 @@ export function PageEditor({
         data: { ...tree.data, blockId: pageBlockIdRef.current ?? tree.data?.blockId },
       };
       await putPageBlocks(pageIdRef.current, withRoot);
-      setStatus("Saved.");
+      // The root id is assigned once (plugin + initial doc fill) and the
+      // server preserves it; remember it so the next save sends the same id
+      // instead of minting a fresh one.
+      pageBlockIdRef.current = withRoot.data?.blockId;
+      setSaveState("saved");
     } catch (err) {
-      setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+      setSaveError(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+      setSaveState("error");
     } finally {
       savingRef.current = false;
     }
@@ -153,9 +165,7 @@ export function PageEditor({
           <BlockGutter editor={editor} wrapRef={wrapRef} />
           <FormatToolbar editor={editor} />
         </div>
-        {status !== "" && (
-          <div style={{ marginTop: 6, fontSize: 12, color: "#6f6f6f" }}>{status}</div>
-        )}
+        <EditorSaveStatus state={saveState} message={saveError} />
       </div>
     </SubPageContext.Provider>
   );
