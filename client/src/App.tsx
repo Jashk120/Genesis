@@ -12,6 +12,8 @@ import {
 import type { DeltaTree } from "./mapper";
 import { AppSidebar } from "./components/AppSidebar";
 import { DocumentHeader } from "./components/DocumentHeader";
+import { ExportMenu } from "./components/ExportMenu";
+import { HistoryPanel } from "./components/HistoryPanel";
 import { PageEditor } from "./components/PageEditor";
 import { SearchPalette } from "./components/SearchPalette";
 
@@ -27,6 +29,8 @@ export function App() {
   const [tree, setTree] = useState<DeltaTree | null>(null);
   const [status, setStatus] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [editorRev, setEditorRev] = useState(0);
   const pendingFlushRef = useRef<(() => Promise<void>) | null>(null);
 
   const refreshPages = useCallback(async (wsId: string) => {
@@ -65,6 +69,7 @@ export function App() {
     setPageId(null);
     setTree(null);
     setStatus("");
+    setHistoryOpen(false);
   }, []);
 
   const refreshWorkspaces = useCallback(async (selectId?: string) => {
@@ -86,6 +91,7 @@ export function App() {
     setPageId(null);
     setTree(null);
     setStatus("");
+    setHistoryOpen(false);
   }, []);
 
   const openPage = useCallback(async (id: string) => {
@@ -93,6 +99,7 @@ export function App() {
     setPageId(id);
     setTree(null);
     setStatus("");
+    setHistoryOpen(false);
     try {
       setTree(await getPageBlocks(id));
     } catch (err: unknown) {
@@ -154,6 +161,21 @@ export function App() {
   }
 
   const selected = pages.find((p) => p.id === pageId) ?? null;
+  const showVersionTools =
+    selected !== null && (selected.kind === "story" || selected.kind === "chapter");
+
+  const handleRestored = useCallback(() => {
+    if (pageId === null) return;
+    const id = pageId;
+    setTree(null);
+    setStatus("");
+    getPageBlocks(id)
+      .then((blocks) => {
+        setTree(blocks);
+        setEditorRev((rev) => rev + 1);
+      })
+      .catch((err: unknown) => setStatus(`Failed to reload blocks: ${errMsg(err)}`));
+  }, [pageId]);
 
   return (
     <div className="app-root">
@@ -188,8 +210,17 @@ export function App() {
           onDelete={() => {
             if (selected !== null) void handleDelete(selected.id);
           }}
+          showVersionTools={showVersionTools}
+          historyOpen={historyOpen}
+          onToggleHistory={() => setHistoryOpen((open) => !open)}
+          exportMenu={
+            selected !== null && showVersionTools ? (
+              <ExportMenu key={selected.id} pageId={selected.id} />
+            ) : undefined
+          }
         />
 
+        <div className="doc-body">
         <div className="doc-scroll">
           <div className="doc-column">
             {status !== "" && (
@@ -203,7 +234,7 @@ export function App() {
               <p className="app-hint">Loading blocks…</p>
             ) : (
               <PageEditor
-                key={selected.id}
+                key={`${selected.id}:${editorRev}`}
                 pageId={selected.id}
                 workspaceId={workspaceId}
                 initialTree={tree}
@@ -214,6 +245,15 @@ export function App() {
               />
             )}
           </div>
+        </div>
+        {historyOpen && selected !== null && showVersionTools && (
+          <HistoryPanel
+            key={selected.id}
+            pageId={selected.id}
+            onRestored={handleRestored}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
         </div>
       </main>
 

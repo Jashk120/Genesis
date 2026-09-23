@@ -235,3 +235,55 @@ export function IconUser(props: IconProps) {
     </Glyph>
   );
 }
+
+export function IconEye(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Glyph>
+  );
+}
+
+export function IconHistory(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.5 12a8.5 8.5 0 1 1 2.5 6" />
+      <path d="M3.5 12H7" />
+      <path d="M3.5 12V8.5" />
+      <path d="M12 8v4.4l3 1.8" />
+    </Glyph>
+  );
+}
+
+export function IconDownload(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 4v11" />
+      <path d="m7.5 11 4.5 4.5L16.5 11" />
+      <path d="M4.5 19.5h15" />
+    </Glyph>
+  );
+}
+
+export function IconDiff(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="6.5" cy="6" r="2.5" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="17.5" cy="12" r="2.5" />
+      <path d="M6.5 8.5v7" />
+      <path d="M8.8 6.8 14.6 11" />
+      <path d="M8.8 17.2 14.6 13" />
+    </Glyph>
+  );
+}
+
+export function IconRestore(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4.5 9a8 8 0 1 1-1 5.5" />
+      <path d="M4.5 4.5V9H9" />
+    </Glyph>
+  );
+}

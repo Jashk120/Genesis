@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { Page } from "../api";
-import { IconInfo, IconMore, IconStar, IconTrash } from "./icons";
+import { IconHistory, IconInfo, IconMore, IconStar, IconTrash } from "./icons";
 
 export interface DocumentHeaderProps {
   page: Page | null;
@@ -9,6 +9,10 @@ export interface DocumentHeaderProps {
   onNavigate: (id: string) => void;
   onRename: (title: string) => void;
   onDelete: () => void;
+  showVersionTools?: boolean;
+  historyOpen?: boolean;
+  onToggleHistory?: () => void;
+  exportMenu?: ReactNode;
 }
 
 function ancestorsOf(pages: Page[], page: Page): Page[] {
@@ -25,7 +29,17 @@ function ancestorsOf(pages: Page[], page: Page): Page[] {
   return chain;
 }
 
-export function DocumentHeader({ page, pages, onNavigate, onRename, onDelete }: DocumentHeaderProps) {
+export function DocumentHeader({
+  page,
+  pages,
+  onNavigate,
+  onRename,
+  onDelete,
+  showVersionTools = false,
+  historyOpen = false,
+  onToggleHistory,
+  exportMenu,
+}: DocumentHeaderProps) {
   const [favorite, setFavorite] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -115,6 +129,19 @@ export function DocumentHeader({ page, pages, onNavigate, onRename, onDelete }: 
       </div>
 
       <div className="doc-actions" ref={actionsRef}>
+        {showVersionTools && onToggleHistory !== undefined && (
+          <button
+            type="button"
+            className="icon-button"
+            title={historyOpen ? "Close version history" : "Open version history"}
+            aria-label={historyOpen ? "Close version history" : "Open version history"}
+            aria-pressed={historyOpen}
+            onClick={onToggleHistory}
+          >
+            <IconHistory size={18} />
+          </button>
+        )}
+        {showVersionTools && exportMenu}
         <button
           type="button"
           className="icon-button"
