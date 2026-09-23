@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import type { Editor } from "@tiptap/core";
 import { markAutoSlash } from "./SlashCommand";
+import { IconGrip, IconPlus } from "./icons";
 
 interface HoveredBlock {
   blockIndex: number;
   top: number;
   height: number;
+  tag: string;
 }
 
 interface BlockGutterProps {
@@ -30,6 +32,23 @@ function isMacOS(): boolean {
   return /macintosh|mac os x/i.test(ua);
 }
 
+function topOffsetFor(tag: string): number {
+  switch (tag) {
+    case "H1":
+      return 10;
+    case "H2":
+      return 8;
+    case "H3":
+    case "H4":
+      return 6;
+    case "BLOCKQUOTE":
+    case "PRE":
+      return 6;
+    default:
+      return 2;
+  }
+}
+
 export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
   const [hovered, setHovered] = useState<HoveredBlock | null>(null);
 
@@ -40,14 +59,11 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
 
     function onMove(e: MouseEvent): void {
       const target = e.target;
-      // The pointer is over the gutter itself: keep the current block.
       if (target instanceof HTMLElement && target.closest(".block-gutter") !== null) {
         return;
       }
       const pm = node.querySelector(".ProseMirror");
       if (pm === null) return;
-      // Gaps between blocks (margins, padding): keep the current block so the
-      // gutter stays mounted while travelling toward it.
       const el = topLevelBlockOf(e.target, pm);
       if (el === null) {
         return;
@@ -60,20 +76,21 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
       const wrapRect = node.getBoundingClientRect();
       const rect = el.getBoundingClientRect();
       const top = rect.top - wrapRect.top;
+      const tag = el.tagName;
       setHovered((prev) => {
         if (
           prev !== null &&
           prev.blockIndex === blockIndex &&
           Math.abs(prev.top - top) < 0.5 &&
-          Math.abs(prev.height - rect.height) < 0.5
+          Math.abs(prev.height - rect.height) < 0.5 &&
+          prev.tag === tag
         ) {
           return prev;
         }
-        return { blockIndex, top, height: rect.height };
+        return { blockIndex, top, height: rect.height, tag };
       });
     }
 
-    // The gutter hides only when the pointer leaves the whole editor wrap.
     function onLeave(): void {
       setHovered(null);
     }
@@ -95,13 +112,16 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
     if (!(child instanceof HTMLElement)) return;
     const wrapRect = wrap.getBoundingClientRect();
     const rect = child.getBoundingClientRect();
-    setHovered({ blockIndex: index, top: rect.top - wrapRect.top, height: rect.height });
+    setHovered({
+      blockIndex: index,
+      top: rect.top - wrapRect.top,
+      height: rect.height,
+      tag: child.tagName,
+    });
   }
 
   function openSlashOnEmpty(index: number, cursorPos: number): void {
     if (editor === null || editor.isDestroyed) return;
-    // Arm the stray-`/` cleanup, then type the trigger so the existing
-    // @tiptap/suggestion menu opens on this block.
     markAutoSlash(editor);
     editor.chain().focus(cursorPos).insertContent("/").run();
     refreshGutterTo(index);
@@ -125,8 +145,6 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
     const current = doc.child(index);
     const emptyParagraph = current.type.name === "paragraph" && current.textContent === "";
     if (emptyParagraph) {
-      // AppFlowy: an empty paragraph gets no sibling; just focus it and open
-      // the slash menu there.
       openSlashOnEmpty(index, pos + 1);
       return;
     }
@@ -136,127 +154,45 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
     openSlashOnEmpty(above ? index : index + 1, clamped + 1);
   }
 
-  if (editor === null || hovered === null) return null;
   const aboveModifier = isMacOS() ? "⌘" : "Alt";
+  const visible = editor !== null && hovered !== null;
+  const top = hovered === null ? 0 : Math.max(hovered.top, 0) + topOffsetFor(hovered.tag);
+  const height = hovered === null ? 28 : Math.max(hovered.height, 28);
 
   return (
     <div
       className="block-gutter"
-      aria-hidden={false}
-      style={{
-        position: "absolute",
-        left: -58,
-        top: Math.max(hovered.top, 0),
-        width: 52,
-        height: Math.max(hovered.height, 28),
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 2,
-        paddingTop: 2,
-        zIndex: 5,
-      }}
+      data-visible={visible ? "true" : "false"}
+      aria-hidden={visible ? "false" : "true"}
+      style={{ top, height }}
     >
-      <span className="gutter-add-wrap" style={{ position: "relative", display: "inline-flex" }}>
+      <span className="gutter-add-wrap">
         <button
           type="button"
+          className="gutter-button"
           data-testid="block-add"
-          aria-label="Add a block"
+          aria-label="Add a block below"
+          tabIndex={visible ? 0 : -1}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => handleAdd(e, e.altKey)}
-          style={{
-            width: 24,
-            height: 24,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "transparent",
-            border: "1px solid transparent",
-            borderRadius: 5,
-            color: "#8a8a8a",
-            cursor: "pointer",
-            padding: 0,
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = "#2e2e2e";
-            (e.currentTarget as HTMLButtonElement).style.color = "#d4d4d4";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-            (e.currentTarget as HTMLButtonElement).style.color = "#8a8a8a";
-          }}
+          onClick={(e) => handleAdd(e, e.altKey || e.metaKey)}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path
-              d="M7 2.5v9M2.5 7h9"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
+          <IconPlus size={14} />
         </button>
-        <span
-          className="gutter-tooltip"
-          role="tooltip"
-          style={{
-            position: "absolute",
-            left: "50%",
-            bottom: "calc(100% + 8px)",
-            transform: "translateX(-50%)",
-            whiteSpace: "nowrap",
-            background: "#2b2b2b",
-            border: "1px solid #3d3d3d",
-            borderRadius: 6,
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-            color: "#e6e6e6",
-            fontSize: 12,
-            lineHeight: "1.5",
-            padding: "6px 10px",
-            display: "none",
-            flexDirection: "column",
-            zIndex: 60,
-            pointerEvents: "none",
-          }}
-        >
+        <span className="gutter-tooltip" role="tooltip">
           <span>Add below</span>
-          <span style={{ color: "#9b9b9b" }}>{`${aboveModifier}+click to add above`}</span>
+          <span className="gutter-tooltip-dim">{`${aboveModifier}+click to add above`}</span>
         </span>
       </span>
       <button
         type="button"
+        className="gutter-button gutter-drag"
         data-testid="block-drag"
         aria-label="Drag to reorder"
         title="Drag to reorder"
+        tabIndex={visible ? 0 : -1}
         onMouseDown={(e) => e.preventDefault()}
-        style={{
-          width: 24,
-          height: 24,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "transparent",
-          border: "1px solid transparent",
-          borderRadius: 5,
-          color: "#8a8a8a",
-          cursor: "grab",
-          padding: 0,
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "#2e2e2e";
-          (e.currentTarget as HTMLButtonElement).style.color = "#d4d4d4";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-          (e.currentTarget as HTMLButtonElement).style.color = "#8a8a8a";
-        }}
       >
-        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-          <circle cx="2.5" cy="2.5" r="1.4" />
-          <circle cx="7.5" cy="2.5" r="1.4" />
-          <circle cx="2.5" cy="8" r="1.4" />
-          <circle cx="7.5" cy="8" r="1.4" />
-          <circle cx="2.5" cy="13.5" r="1.4" />
-          <circle cx="7.5" cy="13.5" r="1.4" />
-        </svg>
+        <IconGrip size={14} />
       </button>
     </div>
   );

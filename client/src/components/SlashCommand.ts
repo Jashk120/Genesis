@@ -3,7 +3,6 @@ import type { Editor, Range } from "@tiptap/core";
 import Suggestion from "@tiptap/suggestion";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import { ReactRenderer } from "@tiptap/react";
-import { computePosition, flip, offset, shift } from "@floating-ui/dom";
 import { createPage } from "../api";
 import { newBlockId } from "../mapper";
 import { SlashMenuList } from "./SlashMenuList";
@@ -21,14 +20,15 @@ export type SlashIconKind =
   | "quote"
   | "code";
 
+export type SlashGroup = "Basic blocks" | "Headings" | "Lists" | "Advanced";
+
 export interface SlashCommandItem {
   title: string;
-  /** Small description shown under the label. */
   hint?: string;
-  /** Right-aligned markdown shortcut hint (e.g. "#", "1.", "T"). */
   shortcut?: string;
   keywords?: string;
   icon?: SlashIconKind;
+  group: SlashGroup;
   run: (ctx: { editor: Editor; range: Range }) => void;
 }
 
@@ -64,6 +64,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
   return [
     {
       title: "Text",
+      group: "Basic blocks",
       hint: "Plain text paragraph",
       shortcut: "T",
       icon: "text",
@@ -75,6 +76,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Page",
+      group: "Advanced",
       hint: "Create a sub-page",
       shortcut: "",
       icon: "page",
@@ -106,6 +108,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Heading 1",
+      group: "Headings",
       hint: "Large section heading",
       shortcut: "#",
       icon: "h1",
@@ -116,6 +119,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Heading 2",
+      group: "Headings",
       hint: "Medium section heading",
       shortcut: "##",
       icon: "h2",
@@ -126,6 +130,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Heading 3",
+      group: "Headings",
       hint: "Small section heading",
       shortcut: "###",
       icon: "h3",
@@ -136,6 +141,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Heading 4",
+      group: "Headings",
       hint: "Tiny section heading",
       shortcut: "####",
       icon: "h4",
@@ -146,6 +152,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Bulleted list",
+      group: "Lists",
       hint: "Unordered list",
       shortcut: "-",
       icon: "bullet",
@@ -156,6 +163,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Numbered list",
+      group: "Lists",
       hint: "Ordered list",
       shortcut: "1.",
       icon: "numbered",
@@ -166,6 +174,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Quote",
+      group: "Advanced",
       hint: "Block quotation",
       shortcut: ">",
       icon: "quote",
@@ -176,6 +185,7 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
     },
     {
       title: "Code",
+      group: "Advanced",
       hint: "Code block",
       shortcut: "```",
       icon: "code",
@@ -202,21 +212,44 @@ function matchesQuery(item: SlashCommandItem, rawQuery: string): boolean {
   return false;
 }
 
-function positionPopup(popup: HTMLElement, clientRect: (() => DOMRect | null) | null | undefined): void {
-  if (clientRect === undefined || clientRect === null) return;
-  const rect = clientRect();
+function anchorRect(
+  editor: Editor,
+  range: Range,
+  clientRect: (() => DOMRect | null) | null | undefined,
+): DOMRect | null {
+  if (clientRect !== undefined && clientRect !== null) {
+    const direct = clientRect();
+    if (direct !== null) return direct;
+  }
+  try {
+    const at = Math.max(0, Math.min(range.to, editor.view.state.doc.content.size));
+    const coords = editor.view.coordsAtPos(at);
+    return new DOMRect(coords.left, coords.bottom, 0, 0);
+  } catch {
+    return null;
+  }
+}
+
+function positionPopup(
+  editor: Editor,
+  range: Range,
+  popup: HTMLElement,
+  clientRect: (() => DOMRect | null) | null | undefined,
+): void {
+  const rect = anchorRect(editor, range, clientRect);
   if (rect === null) return;
-  const virtual = { getBoundingClientRect: () => rect };
-  void computePosition(virtual, popup, {
-    placement: "bottom-start",
-    strategy: "fixed",
-    middleware: [offset(6), flip(), shift()],
-  }).then(({ x, y }) => {
-    popup.style.left = `${x}px`;
-    popup.style.top = `${y}px`;
-    popup.style.position = "fixed";
-    popup.style.zIndex = "50";
-  });
+  const width = 280;
+  const height = Math.min(380, window.innerHeight - 16);
+  const x = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+  const below = rect.bottom + 6;
+  const y =
+    below + height <= window.innerHeight - 8
+      ? below
+      : Math.max(8, rect.top - 6 - height);
+  popup.style.position = "fixed";
+  popup.style.left = `${x}px`;
+  popup.style.top = `${y}px`;
+  popup.style.zIndex = "60";
 }
 
 export const SlashCommand = Extension.create<SlashCommandOptions, SlashCommandStorage>({
@@ -265,7 +298,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions, SlashCommandSt
               editor: props.editor,
             });
             popup.appendChild(renderer.element);
-            positionPopup(popup, props.clientRect);
+            positionPopup(props.editor, props.range, popup, props.clientRect);
           },
           onUpdate: (props: SuggestionProps) => {
             const query = typeof props.query === "string" ? props.query : "";
@@ -274,7 +307,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions, SlashCommandSt
               query,
               command: (item: SlashCommandItem) => props.command(item),
             });
-            if (popup !== null) positionPopup(popup, props.clientRect);
+            if (popup !== null) positionPopup(props.editor, props.range, popup, props.clientRect);
           },
           onKeyDown: (props: { event: KeyboardEvent }) => renderer?.ref?.onKeyDown(props) ?? false,
           onExit: (exitProps: SuggestionProps) => {
