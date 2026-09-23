@@ -112,6 +112,55 @@ export function IconChevronDown(props: IconProps) {
   );
 }
 
+export function IconChevronRight(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="m9 6 6 6-6 6" />
+    </Glyph>
+  );
+}
+
+export function IconDoc(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M6 3.5h7.5L18 8v12.5H6V3.5Z" />
+      <path d="M13.5 3.5V8H18" />
+      <line x1="9" y1="12" x2="15" y2="12" />
+      <line x1="9" y1="15.5" x2="15" y2="15.5" />
+    </Glyph>
+  );
+}
+
+export function IconFolder(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.5 6.5h6l1.6 2h9.4v9H3.5v-11Z" />
+    </Glyph>
+  );
+}
+
+export function IconBook(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 6.5C10 4.8 7.2 4.5 4 5v13c3.2-.5 6-.2 8 1.5 2-1.7 4.8-2 8-1.5V5c-3.2-.5-6-.2-8 1.5Z" />
+      <line x1="12" y1="6.5" x2="12" y2="19.5" />
+    </Glyph>
+  );
+}
+
+export function IconGrip(props: IconProps) {
+  return (
+    <Glyph fill="currentColor" stroke="none" {...props}>
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
+    </Glyph>
+  );
+}
+
 export function IconCode(props: IconProps) {
   return (
     <Glyph {...props}>

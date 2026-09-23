@@ -67,6 +67,27 @@ export function App() {
     setStatus("");
   }, []);
 
+  const refreshWorkspaces = useCallback(async (selectId?: string) => {
+    const ws = await listWorkspaces();
+    setWorkspaces(ws);
+    if (selectId !== undefined) {
+      setWorkspaceId(selectId);
+      setPageId(null);
+      setTree(null);
+      setStatus("");
+    } else if (ws.length > 0 && ws[0] !== undefined) {
+      setWorkspaceId((current) =>
+        current !== null && ws.some((w) => w.id === current) ? current : ws[0].id,
+      );
+    }
+  }, []);
+
+  const handleShowAllDocs = useCallback(() => {
+    setPageId(null);
+    setTree(null);
+    setStatus("");
+  }, []);
+
   const openPage = useCallback(async (id: string) => {
     await pendingFlushRef.current?.().catch(() => undefined);
     setPageId(id);
@@ -93,10 +114,14 @@ export function App() {
     [openPage],
   );
 
-  async function handleCreate() {
+  async function handleCreate(parentId?: string) {
     if (workspaceId === null) return;
     try {
-      const page = await createPage({ workspace_id: workspaceId, title: "Untitled" });
+      const page = await createPage({
+        workspace_id: workspaceId,
+        parent_page_id: parentId ?? null,
+        title: "Untitled",
+      });
       await refreshPages(workspaceId);
       await openPage(page.id);
     } catch (err: unknown) {
@@ -104,12 +129,14 @@ export function App() {
     }
   }
 
-  async function handleDelete() {
-    if (pageId === null || workspaceId === null) return;
+  async function handleDelete(id: string) {
+    if (workspaceId === null) return;
     try {
-      await deletePage(pageId);
-      setPageId(null);
-      setTree(null);
+      await deletePage(id);
+      if (id === pageId) {
+        setPageId(null);
+        setTree(null);
+      }
       await refreshPages(workspaceId);
     } catch (err: unknown) {
       setStatus(`Delete failed: ${errMsg(err)}`);
@@ -134,20 +161,33 @@ export function App() {
         workspaces={workspaces}
         workspaceId={workspaceId}
         onSelectWorkspace={handleSelectWorkspace}
+        onWorkspacesChanged={(selectId) =>
+          refreshWorkspaces(selectId).catch((err: unknown) =>
+            setStatus(`Failed to reload workspaces: ${errMsg(err)}`),
+          )
+        }
         pages={pages}
         selectedId={pageId}
         onSelectPage={handleNavigate}
+        onShowAllDocs={handleShowAllDocs}
         onCreatePage={() => void handleCreate()}
+        onCreateChild={(parentId) => void handleCreate(parentId)}
+        onRenamePage={(id, title) => void handleRename(id, title)}
+        onDeletePage={(id) => void handleDelete(id)}
         onOpenSearch={() => setSearchOpen(true)}
       />
 
       <main className="app-main">
         <DocumentHeader
           page={selected}
+          pages={pages}
+          onNavigate={handleNavigate}
           onRename={(title) => {
             if (selected !== null) void handleRename(selected.id, title);
           }}
-          onDelete={() => void handleDelete()}
+          onDelete={() => {
+            if (selected !== null) void handleDelete(selected.id);
+          }}
         />
 
         <div className="doc-scroll">
