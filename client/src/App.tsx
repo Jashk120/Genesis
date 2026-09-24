@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createPage,
   deletePage,
+  getPage,
   getPageBlocks,
   listPages,
   listWorkspaces,
@@ -16,6 +17,7 @@ import { ExportMenu } from "./components/ExportMenu";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { PageEditor } from "./components/PageEditor";
 import { SearchPalette } from "./components/SearchPalette";
+import { docUrl, focusUrl, parseAppUrl, type FocusRange } from "./components/focusUrl";
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -31,7 +33,23 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editorRev, setEditorRev] = useState(0);
+  const [focus, setFocus] = useState<FocusRange | null>(null);
   const pendingFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const pageIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    pageIdRef.current = pageId;
+  }, [pageId]);
+
+  const pushUrl = useCallback((url: string) => {
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current !== url) window.history.pushState(null, "", url);
+  }, []);
+
+  const replaceUrl = useCallback((url: string) => {
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current !== url) window.history.replaceState(null, "", url);
+  }, []);
 
   const refreshPages = useCallback(async (wsId: string) => {
     setPages(await listPages(wsId));
@@ -41,7 +59,9 @@ export function App() {
     listWorkspaces()
       .then((ws) => {
         setWorkspaces(ws);
-        if (ws.length > 0 && ws[0] !== undefined) setWorkspaceId(ws[0].id);
+        const hasUrlPage =
+          parseAppUrl(window.location.pathname, window.location.search).pageId !== null;
+        if (!hasUrlPage && ws.length > 0 && ws[0] !== undefined) setWorkspaceId(ws[0].id);
       })
       .catch((err: unknown) => setStatus(`Failed to load workspaces: ${errMsg(err)}`));
   }, []);
@@ -64,13 +84,18 @@ export function App() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const handleSelectWorkspace = useCallback((id: string) => {
-    setWorkspaceId(id);
-    setPageId(null);
-    setTree(null);
-    setStatus("");
-    setHistoryOpen(false);
-  }, []);
+  const handleSelectWorkspace = useCallback(
+    (id: string) => {
+      setWorkspaceId(id);
+      setPageId(null);
+      setTree(null);
+      setStatus("");
+      setHistoryOpen(false);
+      setFocus(null);
+      pushUrl("/");
+    },
+    [pushUrl],
+  );
 
   const refreshWorkspaces = useCallback(async (selectId?: string) => {
     const ws = await listWorkspaces();
@@ -80,19 +105,23 @@ export function App() {
       setPageId(null);
       setTree(null);
       setStatus("");
+      setFocus(null);
+      pushUrl("/");
     } else if (ws.length > 0 && ws[0] !== undefined) {
       setWorkspaceId((current) =>
         current !== null && ws.some((w) => w.id === current) ? current : ws[0].id,
       );
     }
-  }, []);
+  }, [pushUrl]);
 
   const handleShowAllDocs = useCallback(() => {
     setPageId(null);
     setTree(null);
     setStatus("");
     setHistoryOpen(false);
-  }, []);
+    setFocus(null);
+    pushUrl("/");
+  }, [pushUrl]);
 
   const openPage = useCallback(async (id: string) => {
     await pendingFlushRef.current?.().catch(() => undefined);
@@ -107,6 +136,42 @@ export function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const target = parseAppUrl(window.location.pathname, window.location.search);
+    if (target.pageId === null) return;
+    void (async () => {
+      try {
+        const page = await getPage(target.pageId as string);
+        setWorkspaceId(page.workspace_id);
+        await openPage(page.id);
+        setFocus(target.focus);
+      } catch (err: unknown) {
+        setStatus(`Failed to open page: ${errMsg(err)}`);
+      }
+    })();
+  }, [openPage]);
+
+  useEffect(() => {
+    function onPopState(): void {
+      const target = parseAppUrl(window.location.pathname, window.location.search);
+      if (target.pageId === null) {
+        setPageId(null);
+        setTree(null);
+        setFocus(null);
+        setHistoryOpen(false);
+        return;
+      }
+      void (async () => {
+        if (target.pageId !== pageIdRef.current) {
+          await openPage(target.pageId as string);
+        }
+        setFocus(target.focus);
+      })();
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [openPage]);
+
   const handlePagesChanged = useCallback(() => {
     if (workspaceId === null) return;
     refreshPages(workspaceId).catch((err: unknown) =>
@@ -116,9 +181,33 @@ export function App() {
 
   const handleNavigate = useCallback(
     (id: string) => {
+      setFocus(null);
+      pushUrl(docUrl(id));
       void openPage(id);
     },
-    [openPage],
+    [openPage, pushUrl],
+  );
+
+  const handleEnterFocus = useCallback(
+    (range: FocusRange) => {
+      if (pageId === null) return;
+      setFocus(range);
+      pushUrl(focusUrl(pageId, range));
+    },
+    [pageId, pushUrl],
+  );
+
+  const handleExitFocus = useCallback(() => {
+    setFocus(null);
+    if (pageId !== null) pushUrl(docUrl(pageId));
+  }, [pageId, pushUrl]);
+
+  const handleFocusRangeChanged = useCallback(
+    (range: FocusRange) => {
+      setFocus(range);
+      if (pageId !== null) replaceUrl(focusUrl(pageId, range));
+    },
+    [pageId, replaceUrl],
   );
 
   async function handleCreate(parentId?: string) {
@@ -130,7 +219,7 @@ export function App() {
         title: "Untitled",
       });
       await refreshPages(workspaceId);
-      await openPage(page.id);
+      handleNavigate(page.id);
     } catch (err: unknown) {
       setStatus(`Create failed: ${errMsg(err)}`);
     }
@@ -143,6 +232,8 @@ export function App() {
       if (id === pageId) {
         setPageId(null);
         setTree(null);
+        setFocus(null);
+        pushUrl("/");
       }
       await refreshPages(workspaceId);
     } catch (err: unknown) {
@@ -242,6 +333,10 @@ export function App() {
                 onNavigate={handleNavigate}
                 onPagesChanged={handlePagesChanged}
                 flushRef={pendingFlushRef}
+                focus={focus}
+                onEnterFocus={handleEnterFocus}
+                onExitFocus={handleExitFocus}
+                onFocusRangeChanged={handleFocusRangeChanged}
               />
             )}
           </div>
@@ -261,7 +356,7 @@ export function App() {
         open={searchOpen}
         pages={pages}
         onClose={() => setSearchOpen(false)}
-        onSelect={(id) => void openPage(id)}
+        onSelect={handleNavigate}
       />
     </div>
   );

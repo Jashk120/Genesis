@@ -121,6 +121,10 @@ export function getPageBlocks(id: string): Promise<DeltaTree> {
   return request<DeltaTree>(`/api/pages/${encodeURIComponent(id)}/blocks`);
 }
 
+export function getPage(id: string): Promise<Page> {
+  return request<Page>(`/api/pages/${encodeURIComponent(id)}`);
+}
+
 export function putPageBlocks(id: string, tree: DeltaTree): Promise<DeltaTree> {
   return request<DeltaTree>(`/api/pages/${encodeURIComponent(id)}/blocks`, {
     method: "PUT",

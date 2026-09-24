@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
+import { Selection } from "@tiptap/pm/state";
 import { genesisExtensions } from "./extensions";
 import { SubPageContext } from "./SubPage";
 import { BlockGutter } from "./BlockGutter";
 import { FormatToolbar } from "./FormatToolbar";
+import { FocusChrome } from "./FocusChrome";
+import { FocusScope, getFocusScope } from "./FocusScope";
 import { DebouncedSaver } from "./autosave";
 import { EditorSaveStatus, type EditorSaveState } from "./EditorSaveStatus";
 import {
@@ -16,6 +19,8 @@ import {
   type DeltaTree,
   type PMDoc,
 } from "../mapper";
+import { countTopLevelBlocks, rangeFromBlockIds, topLevelBlockIds } from "./focusRange";
+import type { FocusRange } from "./focusUrl";
 import { putPageBlocks } from "../api";
 import type { Page } from "../api";
 
@@ -29,6 +34,10 @@ interface PageEditorProps {
   onNavigate: (pageId: string) => void;
   onPagesChanged: () => void;
   flushRef?: MutableRefObject<(() => Promise<void>) | null>;
+  focus: FocusRange | null;
+  onEnterFocus: (range: FocusRange) => void;
+  onExitFocus: () => void;
+  onFocusRangeChanged: (range: FocusRange) => void;
 }
 
 export function PageEditor({
@@ -39,9 +48,14 @@ export function PageEditor({
   onNavigate,
   onPagesChanged,
   flushRef,
+  focus,
+  onEnterFocus,
+  onExitFocus,
+  onFocusRangeChanged,
 }: PageEditorProps) {
   const [saveState, setSaveState] = useState<EditorSaveState>("idle");
   const [saveError, setSaveError] = useState<string>("");
+  const [focusLabel, setFocusLabel] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const editorRef = useRef<Editor | null>(null);
@@ -51,6 +65,8 @@ export function PageEditor({
   const pageBlockIdRef = useRef<string | undefined>(initialTree.data?.blockId);
   const persistRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const saverRef = useRef<DebouncedSaver | null>(null);
+  const scopeActiveRef = useRef(false);
+  const scopeEditorRef = useRef<Editor | null>(null);
   if (saverRef.current === null) {
     saverRef.current = new DebouncedSaver(AUTOSAVE_DELAY_MS, () => persistRef.current());
   }
@@ -70,8 +86,8 @@ export function PageEditor({
   );
 
   const extensions = useMemo(
-    () =>
-      genesisExtensions({
+    () => [
+      ...genesisExtensions({
         workspaceId,
         parentPageId: pageId,
         onPagesChanged,
@@ -80,6 +96,8 @@ export function PageEditor({
           setSaveState("error");
         },
       }),
+      FocusScope,
+    ],
     // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by page
     [pageId, workspaceId],
   );
@@ -147,6 +165,84 @@ export function PageEditor({
     };
   }, [editor]);
 
+  // Apply (or clear) the focused-passage scope on the live editor. The editor
+  // instance is never remounted for focus, so undo history stays shared with
+  // the whole document.
+  useEffect(() => {
+    if (editor === null) return;
+    if (scopeEditorRef.current !== editor) {
+      scopeEditorRef.current = editor;
+      scopeActiveRef.current = false;
+    }
+    if (focus === null) {
+      if (getFocusScope(editor.state) !== null) editor.commands.clearFocusScope();
+      scopeActiveRef.current = false;
+      setFocusLabel(null);
+      return;
+    }
+    const range = rangeFromBlockIds(editor.state.doc, focus.from, focus.to);
+    if (range === null) {
+      onExitFocus();
+      return;
+    }
+    editor.commands.setFocusScope(range.from, range.to);
+    if (!scopeActiveRef.current) {
+      const near = Selection.near(editor.state.doc.resolve(range.from), 1);
+      editor.view.dispatch(editor.state.tr.setSelection(near).scrollIntoView());
+      editor.commands.focus();
+      scopeActiveRef.current = true;
+    }
+    const count = countTopLevelBlocks(editor.state.doc, range);
+    setFocusLabel(`Focused passage · ${count} ${count === 1 ? "block" : "blocks"}`);
+  }, [editor, focus, onExitFocus]);
+
+  // Keep the URL's block-id anchors in step with a scope that grew or shrank
+  // from editing at its edges (App applies this with replaceState).
+  useEffect(() => {
+    if (editor === null || focus === null) return undefined;
+    const target = focus;
+    function syncRange(): void {
+      if (editor === null) return;
+      const range = getFocusScope(editor.state);
+      if (range === null) {
+        onExitFocus();
+        return;
+      }
+      const { fromId, toId } = topLevelBlockIds(editor.state.doc, range.from, range.to);
+      if (fromId === null || toId === null) return;
+      if (fromId !== target.from || toId !== target.to) {
+        onFocusRangeChanged({ from: fromId, to: toId });
+      }
+    }
+    editor.on("transaction", syncRange);
+    return () => {
+      editor.off("transaction", syncRange);
+    };
+  }, [editor, focus, onExitFocus, onFocusRangeChanged]);
+
+  useEffect(() => {
+    if (focus === null) return undefined;
+    const wrap = wrapRef.current;
+    function onKey(event: KeyboardEvent): void {
+      if (event.key !== "Escape") return;
+      if (wrap !== null && !wrap.contains(event.target as Node)) return;
+      event.preventDefault();
+      onExitFocus();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [focus, onExitFocus]);
+
+  function handleFocusPassage(): void {
+    const current = editorRef.current;
+    if (current === null || current.isDestroyed) return;
+    const { from, to } = current.state.selection;
+    if (from === to) return;
+    const { fromId, toId } = topLevelBlockIds(current.state.doc, from, to);
+    if (fromId === null || toId === null) return;
+    onEnterFocus({ from: fromId, to: toId });
+  }
+
   const navigateSoon = useCallback(
     (id: string) => {
       void (async () => {
@@ -161,9 +257,13 @@ export function PageEditor({
     <SubPageContext.Provider value={{ pages, onNavigate: navigateSoon }}>
       <div className="editor-wrap" ref={wrapRef}>
         <div className="editor-box">
+          {focusLabel !== null && <FocusChrome label={focusLabel} onExit={onExitFocus} />}
           <EditorContent editor={editor} />
           <BlockGutter editor={editor} wrapRef={wrapRef} />
-          <FormatToolbar editor={editor} />
+          <FormatToolbar
+            editor={editor}
+            onFocusPassage={focus === null ? handleFocusPassage : undefined}
+          />
         </div>
         <EditorSaveStatus state={saveState} message={saveError} />
       </div>
