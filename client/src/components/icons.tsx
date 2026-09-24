@@ -287,3 +287,15 @@ export function IconRestore(props: IconProps) {
     </Glyph>
   );
 }
+
+export function IconFocus(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4 8V4h4" />
+      <path d="M16 4h4v4" />
+      <path d="M20 16v4h-4" />
+      <path d="M8 20H4v-4" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}

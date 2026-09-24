@@ -2074,3 +2074,62 @@ input:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- focus passage ---- */
+
+.ProseMirror > [data-focus-hidden="true"] {
+  display: none;
+}
+
+.focus-chrome {
+  position: sticky;
+  top: 0;
+  z-index: var(--gen-z-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gen-border);
+  background: var(--gen-bg);
+}
+
+.focus-chrome-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gen-muted);
+  font-size: var(--gen-fs-13);
+}
+
+.focus-chrome-exit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--gen-border-strong);
+  border-radius: var(--gen-radius-2);
+  color: var(--gen-text);
+  font-size: var(--gen-fs-12);
+  cursor: pointer;
+  transition: background var(--gen-t-fast) var(--gen-ease);
+  flex-shrink: 0;
+}
+
+.focus-chrome-exit:hover {
+  background: var(--gen-hover);
+}
+
+.focus-chrome-exit:focus-visible {
+  outline: 2px solid var(--gen-accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 860px) {
+  .focus-chrome {
+    padding: 6px 8px;
+  }
+}

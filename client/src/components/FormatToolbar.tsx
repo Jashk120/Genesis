@@ -6,6 +6,7 @@ import {
   IconBulletList,
   IconCode,
   IconCodeBlock,
+  IconFocus,
   IconLink,
   IconOrderedList,
   IconQuote,
@@ -13,9 +14,10 @@ import {
 
 export interface FormatToolbarProps {
   editor: Editor | null;
+  onFocusPassage?: () => void;
 }
 
-export function FormatToolbar({ editor }: FormatToolbarProps) {
+export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const linkButtonRef = useRef<HTMLButtonElement>(null);
@@ -215,6 +217,21 @@ export function FormatToolbar({ editor }: FormatToolbarProps) {
             Apply
           </button>
         </div>
+      )}
+
+      {onFocusPassage !== undefined && <span className="fmt-separator" aria-hidden="true" />}
+      {onFocusPassage !== undefined && (
+        <button
+          type="button"
+          className="fmt-button fmt-focus"
+          data-testid="fmt-focus"
+          title="Focus this passage"
+          aria-label="Focus this passage"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onFocusPassage}
+        >
+          <IconFocus size={16} />
+        </button>
       )}
     </BubbleMenu>
   );
