@@ -2133,3 +2133,43 @@ input:focus-visible,
     padding: 6px 8px;
   }
 }
+
+/* ---- toggle blocks ---- */
+
+.ProseMirror .toggle-block[data-collapsed="true"] .toggle-content > *:not(:first-child) {
+  display: none;
+}
+
+.toggle-block {
+  position: relative;
+}
+
+.toggle-block > .toggle-chevron {
+  position: absolute;
+  left: -1.4em;
+  top: 0.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gen-text-dim, #8a8f98);
+  cursor: pointer;
+}
+
+.toggle-block > .toggle-chevron:hover {
+  background: var(--gen-hover, rgba(127, 127, 127, 0.14));
+}
+
+.toggle-chevron svg {
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.toggle-block[data-collapsed="true"] > .toggle-chevron svg {
+  transform: rotate(0deg);
+}

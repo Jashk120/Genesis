@@ -18,7 +18,8 @@ export type SlashIconKind =
   | "bullet"
   | "numbered"
   | "quote"
-  | "code";
+  | "code"
+  | "toggle";
 
 export type SlashGroup = "Basic blocks" | "Headings" | "Lists" | "Advanced";
 
@@ -192,6 +193,17 @@ function buildCommands(options: SlashCommandOptions): SlashCommandItem[] {
       keywords: "code codeblock pre",
       run: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+      },
+    },
+    {
+      title: "Toggle",
+      group: "Advanced",
+      hint: "Collapsible block",
+      shortcut: "",
+      icon: "toggle",
+      keywords: "toggle collapse collapsible fold hidden details expand",
+      run: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).setToggle().run();
       },
     },
   ];

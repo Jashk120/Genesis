@@ -299,3 +299,14 @@ export function IconFocus(props: IconProps) {
     </Glyph>
   );
 }
+
+export function IconToggle(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="m5 6 5 4-5 4" />
+      <line x1="13" y1="8" x2="20" y2="8" />
+      <line x1="13" y1="13" x2="20" y2="13" />
+      <line x1="5" y1="18" x2="20" y2="18" />
+    </Glyph>
+  );
+}

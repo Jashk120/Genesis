@@ -116,6 +116,25 @@ function ItemIcon({ kind }: { kind: SlashIconKind | undefined }) {
           />
         </svg>
       );
+    case "toggle":
+      return (
+        <svg {...common} className="slash-icon">
+          <rect x="2" y="2" width="24" height="24" rx="5" stroke="#5a5a5a" strokeWidth="1.4" />
+          <path
+            d="m9 10.5 3.5 3-3.5 3"
+            stroke="#d4d4d4"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M14.5 11.5h5M14.5 15.5h5M9 19.5h9.5"
+            stroke="#d4d4d4"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
     case "text":
     default:
       return (

@@ -10,6 +10,7 @@ import {
   IconLink,
   IconOrderedList,
   IconQuote,
+  IconToggle,
 } from "./icons";
 
 export interface FormatToolbarProps {
@@ -191,6 +192,20 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
       >
         <IconCodeBlock size={16} />
+      </button>
+      <button
+        type="button"
+        className="fmt-button"
+        title="Toggle"
+        aria-label="Toggle"
+        data-active={editor.isActive("toggle") ? "true" : "false"}
+        onClick={() =>
+          editor.isActive("toggle")
+            ? editor.chain().focus().unsetToggle().run()
+            : editor.chain().focus().setToggle().run()
+        }
+      >
+        <IconToggle size={16} />
       </button>
 
       {linkOpen && (
