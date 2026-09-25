@@ -90,6 +90,23 @@ function fullTree(): DeltaTree {
         ],
       },
       {
+        type: "toggle",
+        data: { blockId: "tgl-1", collapsed: true },
+        children: [
+          {
+            type: "paragraph",
+            data: {
+              blockId: "tgl-p1",
+              delta: [{ insert: "hidden", attributes: { spoiler: true } }],
+            },
+          },
+          {
+            type: "paragraph",
+            data: { blockId: "tgl-p2", delta: [{ insert: "visible" }] },
+          },
+        ],
+      },
+      {
         type: "codeBlock",
         data: { blockId: "cb-1", delta: [{ insert: "const x = 1;" }, { insert: "\nconst y = 2;" }], language: "ts" },
       },
@@ -488,5 +505,185 @@ describe("assignMissingBlockIds", () => {
     expect(out.content[0]?.attrs?.["blockId"]).not.toBe("");
     expect(typeof out.content[1]?.attrs?.["blockId"]).toBe("string");
     expect(out.content[2]?.attrs?.["blockId"]).toBe("fine");
+  });
+});
+
+describe("mapper collapse (toggle) + spoiler", () => {
+  it("round-trips a collapsed toggle with a spoiler+bold run and a nested toggle", () => {
+    const tree: DeltaTree = {
+      type: "page",
+      data: { blockId: "page-t" },
+      children: [
+        {
+          type: "toggle",
+          data: { blockId: "t-1", collapsed: true },
+          children: [
+            {
+              type: "paragraph",
+              data: {
+                blockId: "t-p1",
+                delta: [
+                  { insert: "secret", attributes: { bold: true, spoiler: true } },
+                  { insert: " plain" },
+                ],
+              },
+            },
+            {
+              type: "toggle",
+              data: { blockId: "t-2" },
+              children: [
+                { type: "paragraph", data: { blockId: "t-p2", delta: [{ insert: "inner" }] } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(proseMirrorToDeltaTree(deltaTreeToProseMirror(tree))).toEqual(tree);
+  });
+
+  it("round-trips a toggle with no children and no collapsed", () => {
+    const tree: DeltaTree = {
+      type: "page",
+      children: [{ type: "toggle", data: { blockId: "t-empty" } }],
+    };
+    const doc = deltaTreeToProseMirror(tree);
+    expect(doc.content[0]).toEqual({ type: "toggle", attrs: { blockId: "t-empty" } });
+    expect(proseMirrorToDeltaTree(doc)).toEqual(tree);
+  });
+
+  it("round-trips a PM toggle with collapsed:true and asserts the exact PM shape", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "toggle",
+          attrs: { blockId: "t-9", collapsed: true },
+          content: [
+            {
+              type: "paragraph",
+              attrs: { blockId: "p-9" },
+              content: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      ],
+    };
+    const tree = proseMirrorToDeltaTree(doc);
+    expect(tree.children[0]).toEqual({
+      type: "toggle",
+      data: { blockId: "t-9", collapsed: true },
+      children: [
+        { type: "paragraph", data: { blockId: "p-9", delta: [{ insert: "hi" }] } },
+      ],
+    });
+    expect(deltaTreeToProseMirror(tree)).toEqual(doc);
+  });
+
+  it("assignMissingBlockIds mints a blockId for a toggle node and stays stable", () => {
+    const doc: PMDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "toggle",
+          attrs: { collapsed: true },
+          content: [{ type: "paragraph", content: [{ type: "text", text: "hi" }] }],
+        },
+      ],
+    };
+    const first = assignMissingBlockIds(doc);
+    expect(typeof first.doc.content[0]?.attrs?.["blockId"]).toBe("string");
+    const second = assignMissingBlockIds(first.doc);
+    expect(second.changed).toBe(false);
+    expect(second.doc).toEqual(first.doc);
+  });
+
+  it("round-trips a spoiler-only paragraph in both directions", () => {
+    const tree: DeltaTree = {
+      type: "page",
+      children: [
+        {
+          type: "paragraph",
+          data: { blockId: "sp-1", delta: [{ insert: "hush", attributes: { spoiler: true } }] },
+        },
+      ],
+    };
+    expect(proseMirrorToDeltaTree(deltaTreeToProseMirror(tree))).toEqual(tree);
+    const doc: PMDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { blockId: "sp-9" },
+          content: [{ type: "text", text: "hush", marks: [{ type: "spoiler" }] }],
+        },
+      ],
+    };
+    expect(deltaTreeToProseMirror(proseMirrorToDeltaTree(doc))).toEqual(doc);
+  });
+
+  it('rejects collapsed: "yes" on canonical -> PM', () => {
+    expect(() =>
+      deltaTreeToProseMirror({
+        type: "page",
+        children: [
+          {
+            type: "toggle",
+            data: { blockId: "t-bad", collapsed: "yes" as unknown as boolean },
+          },
+        ],
+      }),
+    ).toThrow(MapperError);
+  });
+
+  it("rejects a bare listItem child of toggle in both directions", () => {
+    expect(() =>
+      deltaTreeToProseMirror({
+        type: "page",
+        children: [
+          {
+            type: "toggle",
+            data: { blockId: "t-bad" },
+            children: [{ type: "listItem", data: { blockId: "li-bad", delta: [{ insert: "x" }] } }],
+          },
+        ],
+      }),
+    ).toThrow(MapperError);
+    expect(() =>
+      proseMirrorToDeltaTree({
+        type: "doc",
+        content: [
+          {
+            type: "toggle",
+            attrs: { blockId: "t-bad" },
+            content: [
+              {
+                type: "listItem",
+                attrs: { blockId: "li-bad" },
+                content: [{ type: "paragraph", content: [{ type: "text", text: "x" }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(MapperError);
+  });
+
+  it("rejects an unknown textAlign attr on a PM toggle", () => {
+    expect(() =>
+      proseMirrorToDeltaTree({
+        type: "doc",
+        content: [{ type: "toggle", attrs: { blockId: "t-bad", textAlign: "center" } }],
+      }),
+    ).toThrow(MapperError);
+  });
+
+  it('rejects a non-boolean collapsed attr on a PM toggle', () => {
+    expect(() =>
+      proseMirrorToDeltaTree({
+        type: "doc",
+        content: [{ type: "toggle", attrs: { blockId: "t-bad", collapsed: "yes" } }],
+      }),
+    ).toThrow(MapperError);
   });
 });

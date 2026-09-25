@@ -54,6 +54,7 @@ export const BLOCK_ID_NODE_TYPES: ReadonlySet<string> = new Set([
   "orderedList",
   "listItem",
   "blockquote",
+  "toggle",
   "codeBlock",
   "subPage",
 ]);
@@ -98,11 +99,12 @@ export function assignMissingBlockIds(doc: PMDoc): { doc: PMDoc; changed: boolea
   return { doc: out, changed };
 }
 
-const MARK_ORDER: ReadonlyArray<"bold" | "italic" | "code" | "link"> = [
+const MARK_ORDER: ReadonlyArray<"bold" | "italic" | "code" | "link" | "spoiler"> = [
   "bold",
   "italic",
   "code",
   "link",
+  "spoiler",
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -184,6 +186,9 @@ function deltaOpToPMText(op: DeltaOp, context: string): PMNode | null {
   }
   if (attrs["code"] !== undefined && attrs["code"] !== null && attrs["code"] !== false) {
     marks.push({ type: "code" });
+  }
+  if (attrs["spoiler"] !== undefined && attrs["spoiler"] !== null && attrs["spoiler"] !== false) {
+    marks.push({ type: "spoiler" });
   }
   const link: unknown = attrs["link"];
   if (link !== undefined && link !== null && link !== false) {
@@ -282,6 +287,25 @@ function blockToPM(block: DeltaBlock): PMNode {
       if (block.data.blockId !== undefined) node.attrs = { blockId: block.data.blockId };
       return node;
     }
+    case "toggle": {
+      const children = block.children ?? [];
+      for (const child of children) {
+        if (child.type === "listItem") {
+          throw new MapperError(`${ctx}: toggle children must not be bare "listItem"; wrap it in a list`);
+        }
+      }
+      const collapsed: unknown = block.data.collapsed;
+      if (collapsed !== undefined && collapsed !== null && typeof collapsed !== "boolean") {
+        throw new MapperError(`${ctx}: "collapsed" must be a boolean`);
+      }
+      const node: PMNode = { type: "toggle" };
+      if (children.length > 0) node.content = children.map(blockToPM);
+      const attrs: Record<string, unknown> = {};
+      if (block.data.blockId !== undefined) attrs["blockId"] = block.data.blockId;
+      if (collapsed === true) attrs["collapsed"] = true;
+      if (Object.keys(attrs).length > 0) node.attrs = attrs;
+      return node;
+    }
     case "codeBlock": {
       const delta = block.data.delta ?? [];
       if (!Array.isArray(delta)) throw new MapperError(`${ctx}: "delta" must be an ops array`);
@@ -331,7 +355,7 @@ function blockToPM(block: DeltaBlock): PMNode {
     default: {
       const unexpected: never = block.type;
       throw new MapperError(
-        `unsupported block type "${String(unexpected)}"; supported: page (sub-page only, with pageId), heading, paragraph, bulletList, orderedList, listItem, blockquote, codeBlock`,
+        `unsupported block type "${String(unexpected)}"; supported: page (sub-page only, with pageId), heading, paragraph, bulletList, orderedList, listItem, blockquote, toggle, codeBlock`,
       );
     }
   }
@@ -364,6 +388,9 @@ function pmMarksToAttributes(marks: PMMark[] | undefined, context: string): Delt
         break;
       case "code":
         out["code"] = true;
+        break;
+      case "spoiler":
+        out["spoiler"] = true;
         break;
       case "link": {
         const href: unknown = mark.attrs?.["href"];
@@ -497,6 +524,28 @@ function pmBlockToDelta(node: PMNode): DeltaBlock {
         children: out,
       };
     }
+    case "toggle": {
+      rejectUnknownAttrs("toggle", node.attrs, new Set(["blockId", "collapsed"]));
+      const collapsed: unknown = node.attrs?.["collapsed"];
+      if (collapsed !== undefined && collapsed !== null && typeof collapsed !== "boolean") {
+        throw new MapperError(`toggle: attr "collapsed" must be a boolean`);
+      }
+      const children = node.content ?? [];
+      const out: DeltaBlock[] = children.map((child, i) => {
+        if (child.type === "listItem") {
+          throw new MapperError(`toggle[${i}]: bare "listItem" is not allowed; wrap it in a list`);
+        }
+        return pmBlockToDelta(child);
+      });
+      return {
+        type: "toggle",
+        data: {
+          ...blockIdData(readBlockId(node.attrs)),
+          ...(collapsed === true ? { collapsed: true } : {}),
+        },
+        ...(out.length > 0 ? { children: out } : {}),
+      };
+    }
     case "codeBlock": {
       rejectUnknownAttrs("codeBlock", node.attrs, new Set(["blockId", "language"]));
       const delta: Delta = [];
@@ -525,7 +574,7 @@ function pmBlockToDelta(node: PMNode): DeltaBlock {
     }
     default:
       throw new MapperError(
-        `unsupported ProseMirror node "${node.type}"; supported: paragraph, heading, bulletList, orderedList, listItem, blockquote, codeBlock, subPage`,
+        `unsupported ProseMirror node "${node.type}"; supported: paragraph, heading, bulletList, orderedList, listItem, blockquote, toggle, codeBlock, subPage`,
       );
   }
 }

@@ -14,6 +14,8 @@ export type DeltaAttributes = {
   bold?: boolean;
   italic?: boolean;
   code?: boolean;
+  /** Inline spoiler (hidden/blurred text). */
+  spoiler?: boolean;
   /** Link target URL. */
   link?: string;
   [key: string]: unknown;
@@ -36,13 +38,14 @@ export const SUPPORTED_BLOCK_TYPES = [
   "orderedList",
   "listItem",
   "blockquote",
+  "toggle",
   "codeBlock",
 ] as const;
 
 export type CanonicalBlockType = (typeof SUPPORTED_BLOCK_TYPES)[number];
 
 /** Canonical inline marks (v1 supported set). */
-export const SUPPORTED_MARKS = ["bold", "italic", "code", "link"] as const;
+export const SUPPORTED_MARKS = ["bold", "italic", "code", "link", "spoiler"] as const;
 
 export type SupportedMark = (typeof SUPPORTED_MARKS)[number];
 
@@ -62,6 +65,8 @@ export interface BlockData {
   level?: number;
   /** Code fence language (codeBlock only). */
   language?: string;
+  /** Toggle-only: true when the toggle's child blocks are hidden. */
+  collapsed?: boolean;
   /** Extension point for future block attributes; unknown keys are rejected
    * by the mapper unless explicitly supported. */
   [key: string]: unknown;
