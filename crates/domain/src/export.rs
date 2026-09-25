@@ -165,6 +165,9 @@ fn inline_markdown(data: &Value) -> String {
             continue;
         };
         let attrs = op.get("attributes").and_then(Value::as_object);
+        if attr_flag(attrs, "spoiler") {
+            continue;
+        }
         let mut chunk = if attr_flag(attrs, "code") {
             format!("`{}`", escape_md_code(text))
         } else {
@@ -196,6 +199,9 @@ fn inline_html(data: &Value) -> String {
             continue;
         };
         let attrs = op.get("attributes").and_then(Value::as_object);
+        if attr_flag(attrs, "spoiler") {
+            continue;
+        }
         let mut chunk = escape_html(text);
         if attr_flag(attrs, "code") {
             chunk = format!("<code>{chunk}</code>");
@@ -381,6 +387,28 @@ fn md_node(node: &BlockNode, depth: usize) -> String {
                     .join("\n")
             }
         }
+        "toggle" => {
+            let collapsed = node
+                .data
+                .get("collapsed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if collapsed {
+                node.children
+                    .iter()
+                    .find(|c| c.node_type != "annotation")
+                    .map(|c| md_node(c, depth))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_default()
+            } else {
+                node.children
+                    .iter()
+                    .map(|c| md_node(c, depth))
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            }
+        }
         "codeBlock" => {
             let lang = sanitize_code_lang(
                 node.data
@@ -501,6 +529,28 @@ fn html_node(node: &BlockNode) -> String {
                 .collect::<Vec<_>>()
                 .join("\n");
             format!("<blockquote>{inner}</blockquote>")
+        }
+        "toggle" => {
+            let collapsed = node
+                .data
+                .get("collapsed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if collapsed {
+                node.children
+                    .iter()
+                    .find(|c| c.node_type != "annotation")
+                    .map(html_node)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_default()
+            } else {
+                node.children
+                    .iter()
+                    .map(html_node)
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
         }
         "codeBlock" => {
             let code = escape_html(&raw_text(&node.data));
@@ -1413,6 +1463,55 @@ mod tests {
     #[test]
     fn escape_html_covers_specials() {
         assert_eq!(escape_html("&<>\"'"), "&amp;&lt;&gt;&quot;&#39;");
+    }
+
+    #[test]
+    fn collapsed_toggle_omits_hidden_children() {
+        let toggle = BlockNode {
+            node_type: "toggle".to_string(),
+            id: Some(Uuid::new_v4()),
+            data: json!({"collapsed": true}),
+            children: vec![para("Summary"), para("Hidden")],
+        };
+        let tree = BlockNode::page_root(vec![toggle]);
+        let md = tree_to_markdown(&tree);
+        assert!(md.contains("Summary"), "{md}");
+        assert!(!md.contains("Hidden"), "{md}");
+        let html = tree_to_html(&tree);
+        assert!(html.contains("Summary"), "{html}");
+        assert!(!html.contains("Hidden"), "{html}");
+    }
+
+    #[test]
+    fn expanded_toggle_includes_all_children() {
+        let toggle = BlockNode {
+            node_type: "toggle".to_string(),
+            id: Some(Uuid::new_v4()),
+            data: json!({"collapsed": false}),
+            children: vec![para("Summary"), para("Hidden")],
+        };
+        let tree = BlockNode::page_root(vec![toggle]);
+        let md = tree_to_markdown(&tree);
+        assert!(md.contains("Summary"), "{md}");
+        assert!(md.contains("Hidden"), "{md}");
+        let html = tree_to_html(&tree);
+        assert!(html.contains("Summary"), "{html}");
+        assert!(html.contains("Hidden"), "{html}");
+    }
+
+    #[test]
+    fn spoiler_ops_are_omitted_in_both_formats() {
+        let node = rich_para(json!([
+            {"insert": "visible "},
+            {"insert": "secret", "attributes": {"spoiler": true}},
+        ]));
+        let tree = BlockNode::page_root(vec![node]);
+        let md = tree_to_markdown(&tree);
+        assert!(md.contains("visible"), "{md}");
+        assert!(!md.contains("secret"), "{md}");
+        let html = tree_to_html(&tree);
+        assert!(html.contains("visible"), "{html}");
+        assert!(!html.contains("secret"), "{html}");
     }
 
     #[test]
