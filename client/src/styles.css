@@ -2173,3 +2173,20 @@ input:focus-visible,
 .toggle-block[data-collapsed="true"] > .toggle-chevron svg {
   transform: rotate(0deg);
 }
+
+/* ---- spoiler ---- */
+.ProseMirror .spoiler {
+  cursor: pointer;
+  border-radius: 2px;
+}
+.ProseMirror .spoiler-hidden {
+  filter: blur(4px);
+  transition: filter 120ms ease;
+  user-select: none;
+}
+.ProseMirror .spoiler-hidden::selection {
+  background: transparent;
+}
+.ProseMirror .spoiler-revealed {
+  filter: none;
+}

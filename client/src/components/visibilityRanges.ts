@@ -63,3 +63,38 @@ export function stripFragment(fragment: Fragment): Fragment {
   });
   return Fragment.fromArray(kept);
 }
+
+export interface RunRange {
+  from: number;
+  to: number;
+}
+
+/** Contiguous run of spoiler-marked text containing `pos`, else null. */
+export function spoilerRunAt(doc: PMNode, pos: number): RunRange | null {
+  const $pos = doc.resolve(pos);
+  if (!$pos.parent.isTextblock) return null;
+  const start = $pos.start();
+  let match: RunRange | null = null;
+  $pos.parent.forEach((child, offset) => {
+    if (!child.isText) return;
+    if (!child.marks.some((mark) => mark.type.name === "spoiler")) return;
+    const from = start + offset;
+    const to = from + child.nodeSize;
+    if (match === null && pos >= from && pos <= to) {
+      match = { from, to };
+    }
+  });
+  return match;
+}
+
+/** Every contiguous spoiler-marked text run in the document. */
+export function spoilerRuns(doc: PMNode): RunRange[] {
+  const out: RunRange[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText) return true;
+    if (!node.marks.some((mark) => mark.type.name === "spoiler")) return true;
+    out.push({ from: pos, to: pos + node.nodeSize });
+    return true;
+  });
+  return out;
+}

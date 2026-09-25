@@ -6,6 +6,7 @@ import {
   IconBulletList,
   IconCode,
   IconCodeBlock,
+  IconEye,
   IconFocus,
   IconLink,
   IconOrderedList,
@@ -103,6 +104,16 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         onClick={() => editor.chain().focus().toggleCode().run()}
       >
         <IconCode size={16} />
+      </button>
+      <button
+        type="button"
+        className="fmt-button"
+        title="Spoiler"
+        aria-label="Spoiler"
+        data-active={editor.isActive("spoiler") ? "true" : "false"}
+        onClick={() => editor.chain().focus().toggleSpoiler().run()}
+      >
+        <IconEye size={16} />
       </button>
       <button
         ref={linkButtonRef}

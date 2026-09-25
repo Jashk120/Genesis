@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Fragment, Schema } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
-import { collapsedHiddenRanges, positionIsHidden, stripFragment } from "./visibilityRanges";
+import { collapsedHiddenRanges, positionIsHidden, spoilerRunAt, spoilerRuns, stripFragment } from "./visibilityRanges";
 
 const schema = new Schema({
   nodes: {
@@ -177,5 +177,48 @@ describe("toggle wrap (setToggle core)", () => {
     const wrapped = tr.doc.child(0);
     expect(wrapped.type.name).toBe("toggle");
     expect(wrapped.textContent).toBe("hello");
+  });
+});
+
+describe("spoilerRunAt", () => {
+  it("returns the spoiler run inside spoiler text and null elsewhere", () => {
+    const doc = schema.nodeFromJSON({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "visible " },
+            { type: "text", text: "secret", marks: [{ type: "spoiler" }] },
+          ],
+        },
+      ],
+    });
+    expect(spoilerRunAt(doc, 10)).toEqual({ from: 9, to: 15 });
+    expect(spoilerRunAt(doc, 3)).toBeNull();
+    expect(spoilerRunAt(doc, 0)).toBeNull();
+  });
+});
+
+describe("spoilerRuns", () => {
+  it("reports every spoiler-marked text run", () => {
+    const doc = schema.nodeFromJSON({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "a" },
+            { type: "text", text: "hide", marks: [{ type: "spoiler" }] },
+            { type: "text", text: "b" },
+            { type: "text", text: "shh", marks: [{ type: "spoiler" }] },
+          ],
+        },
+      ],
+    });
+    expect(spoilerRuns(doc)).toEqual([
+      { from: 2, to: 6 },
+      { from: 7, to: 10 },
+    ]);
   });
 });

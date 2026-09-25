@@ -1,6 +1,7 @@
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import { BlockId } from "./BlockId";
+import { Spoiler } from "./Spoiler";
 import { SubPage } from "./SubPage";
 import { Toggle } from "./Toggle";
 import { Visibility } from "./Visibility";
@@ -15,6 +16,7 @@ export function genesisExtensions(slash?: SlashCommandOptions) {
       hardBreak: false,
     }),
     Link.configure({ openOnClick: false }),
+    Spoiler,
     BlockId,
     SubPage,
     Toggle,

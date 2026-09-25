@@ -3,10 +3,16 @@ import { Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import type { Transaction } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { Slice } from "@tiptap/pm/model";
-import { collapsedHiddenRanges, stripFragment } from "./visibilityRanges";
+import { collapsedHiddenRanges, spoilerRunAt, spoilerRuns, stripFragment } from "./visibilityRanges";
+import type { HiddenRange } from "./visibilityRanges";
 
-export const visibilityKey = new PluginKey("visibility");
+export const visibilityKey = new PluginKey<VisibilityPluginState>("visibility");
+
+interface VisibilityPluginState {
+  revealed: HiddenRange[];
+}
 
 export const Visibility = Extension.create({
   name: "visibility",
@@ -15,6 +21,25 @@ export const Visibility = Extension.create({
     return [
       new Plugin({
         key: visibilityKey,
+
+        state: {
+          init: (): VisibilityPluginState => ({ revealed: [] }),
+          apply(tr, previous: VisibilityPluginState): VisibilityPluginState {
+            const action = tr.getMeta(visibilityKey) as
+              | { type: "toggle-reveal"; from: number; to: number }
+              | undefined;
+            let revealed = previous.revealed
+              .map((r) => ({ from: tr.mapping.map(r.from, 1), to: tr.mapping.map(r.to, -1) }))
+              .filter((r) => r.to > r.from);
+            if (action !== undefined) {
+              const exists = revealed.some((r) => r.from === action.from && r.to === action.to);
+              revealed = exists
+                ? revealed.filter((r) => !(r.from === action.from && r.to === action.to))
+                : [...revealed, { from: action.from, to: action.to }];
+            }
+            return { revealed };
+          },
+        },
 
         props: {
           transformCopied(slice: Slice, _view: EditorView): Slice {
@@ -26,6 +51,38 @@ export const Visibility = Extension.create({
           clipboardTextSerializer(slice: Slice): string {
             const stripped = stripFragment(slice.content);
             return stripped.textBetween(0, stripped.size, "\n\n");
+          },
+
+          decorations(state: EditorState) {
+            const runs = spoilerRuns(state.doc);
+            if (runs.length === 0) return null;
+            const revealed = visibilityKey.getState(state)?.revealed ?? [];
+            return DecorationSet.create(
+              state.doc,
+              runs.map((r) =>
+                Decoration.inline(r.from, r.to, {
+                  class: revealed.some((v) => r.from < v.to && v.from < r.to)
+                    ? "spoiler-revealed"
+                    : "spoiler-hidden",
+                }),
+              ),
+            );
+          },
+
+          handleClick(view: EditorView, pos: number, event: MouseEvent): boolean {
+            const el = event.target instanceof Element ? event.target.closest(".spoiler") : null;
+            if (el === null) return false;
+            const run = spoilerRunAt(view.state.doc, pos);
+            if (run === null) return false;
+            event.preventDefault();
+            view.dispatch(
+              view.state.tr.setMeta(visibilityKey, {
+                type: "toggle-reveal",
+                from: run.from,
+                to: run.to,
+              }),
+            );
+            return true;
           },
         },
 
