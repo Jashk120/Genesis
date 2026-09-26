@@ -6,6 +6,7 @@ import { Selection } from "@tiptap/pm/state";
 import { genesisExtensions } from "./extensions";
 import { SubPageContext } from "./SubPage";
 import { BlockGutter } from "./BlockGutter";
+import { catcherFocusTarget, shouldFocusCatcherOnClick } from "./editorCatcher";
 import { FormatToolbar } from "./FormatToolbar";
 import { FocusChrome } from "./FocusChrome";
 import { FocusScope, getFocusScope } from "./FocusScope";
@@ -250,6 +251,22 @@ export function PageEditor({
     return () => document.removeEventListener("keydown", onKey);
   }, [focus, onExitFocus]);
 
+  // Clicking empty space below the document focuses the end (AppFlowy
+  // `_focusOnLastEmptyParagraph`): reuse the trailing empty paragraph when
+  // there is one, otherwise append one, so typing registers immediately.
+  function handleCatcherClick(e: React.MouseEvent<HTMLDivElement>): void {
+    if (!shouldFocusCatcherOnClick(e.target)) return;
+    const current = editorRef.current;
+    if (current === null || current.isDestroyed) return;
+    const target = catcherFocusTarget(current.state);
+    if (target.insert) {
+      current.chain().focus().insertContentAt(target.pos, { type: "paragraph" }).run();
+      current.chain().focus(target.pos + 1).run();
+    } else {
+      current.chain().focus(target.pos).run();
+    }
+  }
+
   function handleFocusPassage(): void {
     const current = editorRef.current;
     if (current === null || current.isDestroyed) return;
@@ -276,6 +293,7 @@ export function PageEditor({
         <div className="editor-box">
           {focusLabel !== null && <FocusChrome label={focusLabel} onExit={onExitFocus} />}
           <EditorContent editor={editor} />
+          <div className="editor-catcher" onClick={handleCatcherClick} />
           <BlockGutter editor={editor} wrapRef={wrapRef} />
           <FormatToolbar
             editor={editor}

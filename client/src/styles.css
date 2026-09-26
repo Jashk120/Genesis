@@ -1060,6 +1060,11 @@ input:focus-visible,
   min-height: 240px;
 }
 
+.editor-catcher {
+  min-height: 400px;
+  cursor: text;
+}
+
 .ProseMirror {
   outline: none;
   color: var(--gen-text);
