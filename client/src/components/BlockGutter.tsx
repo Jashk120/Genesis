@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Editor } from "@tiptap/core";
 import { markAutoSlash } from "./SlashCommand";
+import { blockBeforeFromPos, gutterInsertTarget } from "./gutterInsert";
 import { IconGrip, IconPlus } from "./icons";
 
 interface HoveredBlock {
-  blockIndex: number;
   top: number;
   height: number;
   tag: string;
+  /** Gutter `left` (px, relative to the wrap) so nested blocks push it right. */
+  left: number;
 }
 
 interface BlockGutterProps {
@@ -16,10 +18,17 @@ interface BlockGutterProps {
   wrapRef: RefObject<HTMLDivElement>;
 }
 
-function topLevelBlockOf(target: EventTarget | null, pm: Element): HTMLElement | null {
+/** Must match `--gen-gutter-w` in styles.css. */
+const GUTTER_WIDTH_PX = 44;
+/** Trailing space between the grip button and the hovered block (AppFlowy). */
+const GUTTER_TRAIL_PX = 5;
+
+function closestBlockOf(target: EventTarget | null, pm: Element): HTMLElement | null {
   if (!(target instanceof HTMLElement)) return null;
   if (target === pm) return null;
-  const direct = target.closest(".ProseMirror > *");
+  // Top-level blocks plus blocks nested inside a toggle's content DOM, so
+  // the gutter aligns to the hovered block's own left edge when indented.
+  const direct = target.closest(".ProseMirror > *, .toggle-content > *");
   if (direct instanceof HTMLElement && pm.contains(direct)) return direct;
   return null;
 }
@@ -35,10 +44,11 @@ function isMacOS(): boolean {
 function topOffsetFor(tag: string): number {
   switch (tag) {
     case "H1":
-      return 10;
+      return 13;
     case "H2":
-      return 8;
+      return 11;
     case "H3":
+      return 8;
     case "H4":
       return 6;
     case "BLOCKQUOTE":
@@ -51,6 +61,31 @@ function topOffsetFor(tag: string): number {
 
 export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
   const [hovered, setHovered] = useState<HoveredBlock | null>(null);
+  const hoveredElRef = useRef<HTMLElement | null>(null);
+
+  function refreshGutterToEl(el: HTMLElement): void {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    hoveredElRef.current = el;
+    const wrapRect = wrap.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const top = rect.top - wrapRect.top;
+    const height = rect.height;
+    const tag = el.tagName;
+    const left = rect.left - wrapRect.left - GUTTER_WIDTH_PX - GUTTER_TRAIL_PX;
+    setHovered((prev) => {
+      if (
+        prev !== null &&
+        Math.abs(prev.top - top) < 0.5 &&
+        Math.abs(prev.height - height) < 0.5 &&
+        prev.tag === tag &&
+        Math.abs(prev.left - left) < 0.5
+      ) {
+        return prev;
+      }
+      return { top, height, tag, left };
+    });
+  }
 
   useEffect(() => {
     const wrapNode = wrapRef.current;
@@ -64,34 +99,15 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
       }
       const pm = node.querySelector(".ProseMirror");
       if (pm === null) return;
-      const el = topLevelBlockOf(e.target, pm);
+      const el = closestBlockOf(e.target, pm);
       if (el === null) {
         return;
       }
-      const children = Array.from(pm.children);
-      const blockIndex = children.indexOf(el);
-      if (blockIndex < 0) {
-        return;
-      }
-      const wrapRect = node.getBoundingClientRect();
-      const rect = el.getBoundingClientRect();
-      const top = rect.top - wrapRect.top;
-      const tag = el.tagName;
-      setHovered((prev) => {
-        if (
-          prev !== null &&
-          prev.blockIndex === blockIndex &&
-          Math.abs(prev.top - top) < 0.5 &&
-          Math.abs(prev.height - rect.height) < 0.5 &&
-          prev.tag === tag
-        ) {
-          return prev;
-        }
-        return { blockIndex, top, height: rect.height, tag };
-      });
+      refreshGutterToEl(el);
     }
 
     function onLeave(): void {
+      hoveredElRef.current = null;
       setHovered(null);
     }
 
@@ -103,28 +119,13 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
     };
   }, [wrapRef, editor]);
 
-  function refreshGutterTo(index: number): void {
-    const wrap = wrapRef.current;
-    if (wrap === null) return;
-    const pm = wrap.querySelector(".ProseMirror");
-    if (pm === null) return;
-    const child = pm.children.item(index);
-    if (!(child instanceof HTMLElement)) return;
-    const wrapRect = wrap.getBoundingClientRect();
-    const rect = child.getBoundingClientRect();
-    setHovered({
-      blockIndex: index,
-      top: rect.top - wrapRect.top,
-      height: rect.height,
-      tag: child.tagName,
-    });
-  }
-
-  function openSlashOnEmpty(index: number, cursorPos: number): void {
+  function openSlashAt(cursorPos: number, el: HTMLElement | null): void {
     if (editor === null || editor.isDestroyed) return;
     markAutoSlash(editor);
     editor.chain().focus(cursorPos).insertContent("/").run();
-    refreshGutterTo(index);
+    if (el !== null && editor.view.dom.contains(el)) {
+      refreshGutterToEl(el);
+    }
   }
 
   function handleAdd(e: React.MouseEvent, above: boolean): void {
@@ -134,37 +135,58 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
     const doc = editor.state.doc;
     if (doc.childCount === 0) {
       editor.chain().focus().insertContentAt(0, { type: "paragraph" }).run();
-      openSlashOnEmpty(0, 1);
+      markAutoSlash(editor);
+      editor.chain().focus(1).insertContent("/").run();
+      const pm = wrapRef.current?.querySelector(".ProseMirror");
+      const first = pm?.children.item(0);
+      if (first instanceof HTMLElement) refreshGutterToEl(first);
       return;
     }
-    const index = Math.max(0, Math.min(hovered.blockIndex, doc.childCount - 1));
-    let pos = 0;
-    for (let i = 0; i < index; i++) {
-      pos += doc.child(i).nodeSize;
-    }
-    const current = doc.child(index);
-    const emptyParagraph = current.type.name === "paragraph" && current.textContent === "";
-    if (emptyParagraph) {
-      openSlashOnEmpty(index, pos + 1);
+    const hoveredEl = hoveredElRef.current;
+    if (hoveredEl === null) return;
+    let raw: number;
+    try {
+      raw = editor.view.posAtDOM(hoveredEl, 0);
+    } catch {
       return;
     }
-    const insertPos = above ? pos : pos + current.nodeSize;
-    const clamped = Math.max(0, Math.min(insertPos, doc.content.size));
+    const before = blockBeforeFromPos(editor.state.doc, raw);
+    if (before === null) return;
+    const target = gutterInsertTarget(editor.state.doc, before);
+    if (target === null) return;
+    if (target.emptyParagraph) {
+      openSlashAt(before + 1, hoveredEl);
+      return;
+    }
+    const insertPos = above ? before : before + target.nodeSize;
+    const clamped = Math.max(0, Math.min(insertPos, editor.state.doc.content.size));
     editor.chain().focus().insertContentAt(clamped, { type: "paragraph" }).run();
-    openSlashOnEmpty(above ? index : index + 1, clamped + 1);
+    markAutoSlash(editor);
+    editor.chain().focus(clamped + 1).insertContent("/").run();
+    try {
+      const dom = editor.view.nodeDOM(clamped);
+      if (dom instanceof HTMLElement) {
+        refreshGutterToEl(dom);
+      } else if (hoveredEl.isConnected) {
+        refreshGutterToEl(hoveredEl);
+      }
+    } catch {
+      // Keep the previous gutter position; not fatal.
+    }
   }
 
-  const aboveModifier = isMacOS() ? "⌘" : "Alt";
+  const aboveModifier = isMacOS() ? "Option" : "Alt";
   const visible = editor !== null && hovered !== null;
   const top = hovered === null ? 0 : Math.max(hovered.top, 0) + topOffsetFor(hovered.tag);
   const height = hovered === null ? 28 : Math.max(hovered.height, 28);
+  const left = hovered === null ? -48 : hovered.left;
 
   return (
     <div
       className="block-gutter"
       data-visible={visible ? "true" : "false"}
       aria-hidden={visible ? "false" : "true"}
-      style={{ top, height }}
+      style={{ top, height, left }}
     >
       <span className="gutter-add-wrap">
         <button
@@ -179,7 +201,7 @@ export function BlockGutter({ editor, wrapRef }: BlockGutterProps) {
           <IconPlus size={14} />
         </button>
         <span className="gutter-tooltip" role="tooltip">
-          <span>Add below</span>
+          <span>Click to add below</span>
           <span className="gutter-tooltip-dim">{`${aboveModifier}+click to add above`}</span>
         </span>
       </span>

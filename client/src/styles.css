@@ -194,7 +194,7 @@ input:focus-visible,
 }
 
 .doc-column {
-  max-width: 796px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 24px 40px 160px;
 }
@@ -1069,7 +1069,7 @@ input:focus-visible,
 }
 
 .ProseMirror > * {
-  max-width: 700px;
+  max-width: none;
 }
 
 .ProseMirror > *:first-child {
@@ -1510,8 +1510,8 @@ input:focus-visible,
 }
 
 .gutter-button {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1533,13 +1533,13 @@ input:focus-visible,
 
 .gutter-drag {
   cursor: grab;
+  margin-right: 5px;
 }
 
 .gutter-tooltip {
   position: absolute;
-  left: 50%;
+  left: 0;
   bottom: calc(100% + 8px);
-  transform: translateX(-50%);
   white-space: nowrap;
   background: #2b2b2b;
   border: 1px solid #3d3d3d;
@@ -1549,15 +1549,22 @@ input:focus-visible,
   font-size: var(--gen-fs-12);
   line-height: 1.5;
   padding: 6px 10px;
-  display: none;
+  display: flex;
   flex-direction: column;
   z-index: var(--gen-z-slash);
   pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--gen-t-fast) var(--gen-ease),
+    visibility var(--gen-t-fast) var(--gen-ease);
 }
 
 .gutter-add-wrap:hover .gutter-tooltip,
 .gutter-button:focus-visible + .gutter-tooltip {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 150ms;
 }
 
 .gutter-tooltip-dim {
