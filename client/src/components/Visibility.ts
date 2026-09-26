@@ -8,6 +8,15 @@ import { Slice } from "@tiptap/pm/model";
 import { collapsedHiddenRanges, spoilerRunAt, spoilerRuns, stripFragment } from "./visibilityRanges";
 import type { HiddenRange } from "./visibilityRanges";
 
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    visibility: {
+      revealAllSpoilers: () => ReturnType;
+      hideAllSpoilers: () => ReturnType;
+    };
+  }
+}
+
 export const visibilityKey = new PluginKey<VisibilityPluginState>("visibility");
 
 interface VisibilityPluginState {
@@ -16,6 +25,32 @@ interface VisibilityPluginState {
 
 export const Visibility = Extension.create({
   name: "visibility",
+
+  addCommands() {
+    return {
+      revealAllSpoilers:
+        () =>
+        ({ state, dispatch }) => {
+          if (dispatch !== undefined) {
+            dispatch(
+              state.tr.setMeta(visibilityKey, {
+                type: "set-revealed",
+                ranges: spoilerRuns(state.doc),
+              }),
+            );
+          }
+          return true;
+        },
+      hideAllSpoilers:
+        () =>
+        ({ state, dispatch }) => {
+          if (dispatch !== undefined) {
+            dispatch(state.tr.setMeta(visibilityKey, { type: "set-revealed", ranges: [] }));
+          }
+          return true;
+        },
+    };
+  },
 
   addProseMirrorPlugins() {
     return [
@@ -27,15 +62,18 @@ export const Visibility = Extension.create({
           apply(tr, previous: VisibilityPluginState): VisibilityPluginState {
             const action = tr.getMeta(visibilityKey) as
               | { type: "toggle-reveal"; from: number; to: number }
+              | { type: "set-revealed"; ranges: HiddenRange[] }
               | undefined;
             let revealed = previous.revealed
               .map((r) => ({ from: tr.mapping.map(r.from, 1), to: tr.mapping.map(r.to, -1) }))
               .filter((r) => r.to > r.from);
-            if (action !== undefined) {
+            if (action?.type === "toggle-reveal") {
               const exists = revealed.some((r) => r.from === action.from && r.to === action.to);
               revealed = exists
                 ? revealed.filter((r) => !(r.from === action.from && r.to === action.to))
                 : [...revealed, { from: action.from, to: action.to }];
+            } else if (action?.type === "set-revealed") {
+              revealed = action.ranges.map((r) => ({ from: r.from, to: r.to }));
             }
             return { revealed };
           },

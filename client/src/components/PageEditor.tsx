@@ -26,6 +26,11 @@ import type { Page } from "../api";
 
 const AUTOSAVE_DELAY_MS = 700;
 
+export interface VisibilityControls {
+  revealAll: () => void;
+  hideAll: () => void;
+}
+
 interface PageEditorProps {
   pageId: string;
   workspaceId: string;
@@ -34,6 +39,7 @@ interface PageEditorProps {
   onNavigate: (pageId: string) => void;
   onPagesChanged: () => void;
   flushRef?: MutableRefObject<(() => Promise<void>) | null>;
+  visibilityRef?: MutableRefObject<VisibilityControls | null>;
   focus: FocusRange | null;
   onEnterFocus: (range: FocusRange) => void;
   onExitFocus: () => void;
@@ -48,6 +54,7 @@ export function PageEditor({
   onNavigate,
   onPagesChanged,
   flushRef,
+  visibilityRef,
   focus,
   onEnterFocus,
   onExitFocus,
@@ -154,6 +161,16 @@ export function PageEditor({
     persistRef.current = runPersist;
     if (flushRef !== undefined) {
       flushRef.current = () => saverRef.current?.flush() ?? Promise.resolve();
+    }
+    if (visibilityRef !== undefined) {
+      visibilityRef.current = {
+        revealAll: () => {
+          editorRef.current?.commands.revealAllSpoilers();
+        },
+        hideAll: () => {
+          editorRef.current?.commands.hideAllSpoilers();
+        },
+      };
     }
   });
 

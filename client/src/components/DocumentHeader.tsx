@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { Page } from "../api";
-import { IconHistory, IconInfo, IconMore, IconStar, IconTrash } from "./icons";
+import { IconEye, IconEyeOff, IconHistory, IconInfo, IconMore, IconStar, IconTrash } from "./icons";
 
 export interface DocumentHeaderProps {
   page: Page | null;
@@ -10,8 +10,11 @@ export interface DocumentHeaderProps {
   onRename: (title: string) => void;
   onDelete: () => void;
   showVersionTools?: boolean;
+  showVisibilityTools?: boolean;
   historyOpen?: boolean;
   onToggleHistory?: () => void;
+  onRevealAll?: () => void;
+  onHideAll?: () => void;
   exportMenu?: ReactNode;
 }
 
@@ -36,8 +39,11 @@ export function DocumentHeader({
   onRename,
   onDelete,
   showVersionTools = false,
+  showVisibilityTools = false,
   historyOpen = false,
   onToggleHistory,
+  onRevealAll,
+  onHideAll,
   exportMenu,
 }: DocumentHeaderProps) {
   const [favorite, setFavorite] = useState(false);
@@ -139,6 +145,30 @@ export function DocumentHeader({
             onClick={onToggleHistory}
           >
             <IconHistory size={18} />
+          </button>
+        )}
+        {showVisibilityTools && onRevealAll !== undefined && (
+          <button
+            type="button"
+            className="icon-button"
+            title="Reveal all spoilers"
+            aria-label="Reveal all spoilers"
+            data-testid="reveal-all-spoilers"
+            onClick={onRevealAll}
+          >
+            <IconEye size={18} />
+          </button>
+        )}
+        {showVisibilityTools && onHideAll !== undefined && (
+          <button
+            type="button"
+            className="icon-button"
+            title="Hide all spoilers"
+            aria-label="Hide all spoilers"
+            data-testid="hide-all-spoilers"
+            onClick={onHideAll}
+          >
+            <IconEyeOff size={18} />
           </button>
         )}
         {showVersionTools && exportMenu}

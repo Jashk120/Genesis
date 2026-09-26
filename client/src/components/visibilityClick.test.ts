@@ -27,6 +27,18 @@ function visibilityPlugin(): Plugin {
   return plugin;
 }
 
+type VisibilityCommand = () => (props: {
+  state: EditorState;
+  dispatch: (tr: Parameters<EditorView["dispatch"]>[0]) => void;
+}) => boolean;
+
+function visibilityCommands(): Record<string, VisibilityCommand> {
+  const addCommands = Visibility.config.addCommands as
+    | ((this: unknown) => Record<string, VisibilityCommand>)
+    | undefined;
+  return addCommands?.call(undefined) ?? {};
+}
+
 function spoilerState(): EditorState {
   const doc = schema.nodeFromJSON({
     type: "doc",
@@ -36,6 +48,24 @@ function spoilerState(): EditorState {
         content: [
           { type: "text", text: "visible " },
           { type: "text", text: "secret", marks: [{ type: "spoiler" }] },
+        ],
+      },
+    ],
+  });
+  return EditorState.create({ schema, doc, plugins: [visibilityPlugin()] });
+}
+
+function twoRunState(): EditorState {
+  const doc = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "a" },
+          { type: "text", text: "hide", marks: [{ type: "spoiler" }] },
+          { type: "text", text: "b" },
+          { type: "text", text: "shh", marks: [{ type: "spoiler" }] },
         ],
       },
     ],
@@ -123,5 +153,52 @@ describe("visibility spoiler click", () => {
 
     expect(handleClick(view, INSIDE_SPOILER, event)).toBe(false);
     expect(preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe("visibility spoiler commands", () => {
+  it("revealAllSpoilers reveals every spoiler run", () => {
+    const revealAll = visibilityCommands()["revealAllSpoilers"];
+    if (revealAll === undefined) throw new Error("revealAllSpoilers missing");
+    const view = makeView(twoRunState());
+
+    const handled = revealAll()({
+      state: view.state,
+      dispatch: (tr) => {
+        view.state = view.state.apply(tr);
+      },
+    });
+
+    expect(handled).toBe(true);
+    expect(visibilityKey.getState(view.state)?.revealed).toEqual([
+      { from: 2, to: 6 },
+      { from: 7, to: 10 },
+    ]);
+  });
+
+  it("hideAllSpoilers clears the revealed set", () => {
+    const hideAll = visibilityCommands()["hideAllSpoilers"];
+    if (hideAll === undefined) throw new Error("hideAllSpoilers missing");
+    const initial = twoRunState();
+    const revealAll = initial.apply(
+      initial.tr.setMeta(visibilityKey, {
+        type: "set-revealed",
+        ranges: [
+          { from: 2, to: 6 },
+          { from: 7, to: 10 },
+        ],
+      }),
+    );
+    const view = makeView(revealAll);
+
+    const handled = hideAll()({
+      state: view.state,
+      dispatch: (tr) => {
+        view.state = view.state.apply(tr);
+      },
+    });
+
+    expect(handled).toBe(true);
+    expect(visibilityKey.getState(view.state)?.revealed).toEqual([]);
   });
 });

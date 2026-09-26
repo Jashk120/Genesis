@@ -15,7 +15,7 @@ import { AppSidebar } from "./components/AppSidebar";
 import { DocumentHeader } from "./components/DocumentHeader";
 import { ExportMenu } from "./components/ExportMenu";
 import { HistoryPanel } from "./components/HistoryPanel";
-import { PageEditor } from "./components/PageEditor";
+import { PageEditor, type VisibilityControls } from "./components/PageEditor";
 import { SearchPalette } from "./components/SearchPalette";
 import { docUrl, focusUrl, parseAppUrl, type FocusRange } from "./components/focusUrl";
 
@@ -35,6 +35,7 @@ export function App() {
   const [editorRev, setEditorRev] = useState(0);
   const [focus, setFocus] = useState<FocusRange | null>(null);
   const pendingFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const visibilityRef = useRef<VisibilityControls | null>(null);
   const pageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -302,8 +303,11 @@ export function App() {
             if (selected !== null) void handleDelete(selected.id);
           }}
           showVersionTools={showVersionTools}
+          showVisibilityTools={selected !== null && tree !== null && workspaceId !== null}
           historyOpen={historyOpen}
           onToggleHistory={() => setHistoryOpen((open) => !open)}
+          onRevealAll={() => visibilityRef.current?.revealAll()}
+          onHideAll={() => visibilityRef.current?.hideAll()}
           exportMenu={
             selected !== null && showVersionTools ? (
               <ExportMenu key={selected.id} pageId={selected.id} />
@@ -333,6 +337,7 @@ export function App() {
                 onNavigate={handleNavigate}
                 onPagesChanged={handlePagesChanged}
                 flushRef={pendingFlushRef}
+                visibilityRef={visibilityRef}
                 focus={focus}
                 onEnterFocus={handleEnterFocus}
                 onExitFocus={handleExitFocus}

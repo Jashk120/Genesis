@@ -245,6 +245,17 @@ export function IconEye(props: IconProps) {
   );
 }
 
+export function IconEyeOff(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.5 3.5 20.5 20.5" />
+      <path d="M9.9 5.9A9.9 9.9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17.2 17.2 0 0 1-3.4 4.3" />
+      <path d="M6.4 6.7A16.8 16.8 0 0 0 2.5 12S6 18.5 12 18.5a9.7 9.7 0 0 0 4-.85" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </Glyph>
+  );
+}
+
 export function IconHistory(props: IconProps) {
   return (
     <Glyph {...props}>
