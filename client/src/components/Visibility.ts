@@ -74,6 +74,10 @@ export const Visibility = Extension.create({
             if (el === null) return false;
             const run = spoilerRunAt(view.state.doc, pos);
             if (run === null) return false;
+            const revealed = visibilityKey.getState(view.state)?.revealed ?? [];
+            // Once revealed, a spoiler behaves like ordinary editable text.
+            // Only hidden spoilers consume the click to toggle visibility.
+            if (revealed.some((r) => r.from < run.to && run.from < r.to)) return false;
             event.preventDefault();
             view.dispatch(
               view.state.tr.setMeta(visibilityKey, {

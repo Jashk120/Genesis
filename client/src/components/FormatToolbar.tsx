@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { BubbleMenu } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { computePosition, flip, offset, shift } from "@floating-ui/dom";
@@ -68,6 +68,10 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
     editor?.chain().focus().run();
   }
 
+  function keepSelection(event: MouseEvent<HTMLButtonElement>): void {
+    event.preventDefault();
+  }
+
   return (
     <BubbleMenu
       editor={editor}
@@ -80,6 +84,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Bold"
         aria-label="Bold"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("bold") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
@@ -90,6 +95,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Italic"
         aria-label="Italic"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("italic") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
@@ -100,6 +106,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Inline code"
         aria-label="Inline code"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("code") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleCode().run()}
       >
@@ -110,6 +117,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Spoiler"
         aria-label="Spoiler"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("spoiler") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleSpoiler().run()}
       >
@@ -123,6 +131,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         aria-label="Link"
         aria-haspopup="dialog"
         aria-expanded={linkOpen}
+        onMouseDown={keepSelection}
         data-active={editor.isActive("link") ? "true" : "false"}
         onClick={() => (linkOpen ? cancelLink() : openLink())}
       >
@@ -136,6 +145,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Heading 1"
         aria-label="Heading 1"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("heading", { level: 1 }) ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
       >
@@ -146,6 +156,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Heading 2"
         aria-label="Heading 2"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("heading", { level: 2 }) ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
@@ -156,6 +167,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Heading 3"
         aria-label="Heading 3"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("heading", { level: 3 }) ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
       >
@@ -169,6 +181,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Bullet list"
         aria-label="Bullet list"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("bulletList") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
@@ -179,6 +192,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Numbered list"
         aria-label="Numbered list"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("orderedList") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
       >
@@ -189,6 +203,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Quote"
         aria-label="Quote"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("blockquote") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
       >
@@ -199,6 +214,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Code block"
         aria-label="Code block"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("codeBlock") ? "true" : "false"}
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
       >
@@ -209,6 +225,7 @@ export function FormatToolbar({ editor, onFocusPassage }: FormatToolbarProps) {
         className="fmt-button"
         title="Toggle"
         aria-label="Toggle"
+        onMouseDown={keepSelection}
         data-active={editor.isActive("toggle") ? "true" : "false"}
         onClick={() =>
           editor.isActive("toggle")

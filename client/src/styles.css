@@ -2183,10 +2183,13 @@ input:focus-visible,
   filter: blur(4px);
   transition: filter 120ms ease;
   user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
 .ProseMirror .spoiler-hidden::selection {
   background: transparent;
 }
 .ProseMirror .spoiler-revealed {
   filter: none;
+  cursor: text;
 }
